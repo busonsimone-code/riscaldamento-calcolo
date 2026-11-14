@@ -1,0 +1,680 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Riscaldamento">
+<title>Dimensionamento riscaldamento</title>
+<style>
+:root{--bg:#f5f5f2;--card:#fff;--ink:#1d1d1b;--mut:#666;--line:#d8d8d2;--acc:#b5471f;--ok:#1d7a3f;--warn:#a85f00;--bad:#b00020;--soft:#efefe9}
+@media (prefers-color-scheme:dark){:root{--bg:#151514;--card:#1f1f1d;--ink:#ecece8;--mut:#a3a39d;--line:#3a3a36;--acc:#ff8a5c;--ok:#5fd08a;--warn:#f0b24a;--bad:#ff6b81;--soft:#292927}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 system-ui,"Segoe UI",Arial,sans-serif}
+main{max-width:1100px;margin:0 auto;padding:16px}
+h1{font-size:22px;margin:4px 0 2px}
+h2{font-size:17px;margin:0 0 8px}
+.sub{color:var(--mut);margin:0 0 12px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px;margin:12px 0}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
+label{display:block;font-size:12.5px;color:var(--mut)}
+input,select,button{font:inherit;color:inherit}
+@media (max-width:700px){input,select,textarea{font-size:16px}}
+input,select{width:100%;margin-top:2px;padding:6px 8px;border:1px solid var(--line);border-radius:6px;background:var(--bg)}
+button{padding:7px 12px;border:1px solid var(--line);border-radius:6px;background:var(--soft);cursor:pointer}
+button.pri{background:var(--acc);border-color:var(--acc);color:#fff}
+button.x{padding:3px 9px}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+details.room{border:1px solid var(--line);border-radius:8px;padding:8px 10px;margin:8px 0;background:var(--card)}
+details.room>summary{cursor:pointer;font-weight:600}
+details.adv{margin-top:10px}
+details.adv>summary{cursor:pointer;color:var(--mut);font-size:13px}
+.rad{border-top:1px dashed var(--line);margin-top:8px;padding-top:8px}
+.rest{font-weight:600}
+table{border-collapse:collapse;width:100%;font-size:13.5px}
+th,td{border-bottom:1px solid var(--line);padding:5px 6px;text-align:right;white-space:nowrap}
+th:first-child,td:first-child{text-align:left}
+th{color:var(--mut);font-weight:600}
+.tw{overflow-x:auto}
+.big{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px}
+.kpi{background:var(--soft);border-radius:8px;padding:10px}
+.kpi b{display:block;font-size:22px}
+.kpi span{font-size:12.5px;color:var(--mut)}
+.ok{color:var(--ok)}.warn{color:var(--warn)}.bad{color:var(--bad)}
+.note{font-size:13px;color:var(--mut)}
+ul.l{margin:6px 0 0 18px;padding:0}ul.l li{margin:3px 0}
+svg text{fill:var(--mut);font-size:11px}
+.hide{display:none}
+@media print{body{background:#fff;color:#000}.no-print{display:none!important}.card{break-inside:avoid;border-color:#999}}
+</style>
+</head>
+<body>
+<main>
+<h1>Dimensionamento riscaldamento</h1>
+<p class="sub">Calcolo semplificato ispirato alla UNI EN 12831 per riscaldare un solo piano con piani freddi sopra e sotto. Dove non sai un dato lascia il valore proposto. Quello che vedi ora è un esempio da sostituire.</p>
+
+<div class="row no-print" id="tabs" style="margin:8px 0"><button data-view="calc" class="pri">Calcolo</button><button data-view="cald">Caldaia e ΔT</button><button data-view="posto">Sul posto</button></div>
+<div id="viewCalc">
+<div class="card no-print">
+  <h2>1. La casa</h2>
+  <div class="grid">
+    <label>Comune (temperatura minima di progetto)<select id="comune"></select></label>
+    <label>Temp. minima esterna (°C)<input type="number" step="1" data-g="Te"></label>
+    <label>Com'è costruita<select data-g="epoca" id="epoca"></select></label>
+    <label>Mandata che vuoi usare (°C)<input type="number" step="1" data-g="Tm"></label>
+    <label>Ritorno (°C)<input type="number" step="1" data-g="Tr"></label>
+    <label>Mandata massima possibile (°C): limite di caldaia e tubi<input type="number" step="1" data-g="TfMax"></label>
+    <label>Salto che imposto sul circolatore (par. 34)<select data-g="dTp"><option value="20">20 K (par. 34 = 0)</option><option value="15">15 K (par. 34 = 1)</option><option value="10">10 K (par. 34 = 2)</option><option value="5">5 K (par. 34 = 3)</option></select></label>
+  </div>
+  <p class="note">I valori delle temperature minime per comune sono indicativi: verificali. La scelta "com'è costruita" imposta da sola muri, finestre, solai e ricambi d'aria.</p>
+  <details class="adv"><summary>Impostazioni avanzate (di solito non servono)</summary><div class="grid" id="gForm" style="margin-top:8px"></div></details>
+</div>
+
+<div class="card no-print">
+  <div class="row" style="justify-content:space-between">
+    <h2 style="margin:0">2. Stanze e radiatori del piano riscaldato</h2>
+    <div class="row">
+      <button id="addRoom" class="pri">+ Stanza</button>
+      <button id="clearAll">Svuota</button>
+      <button id="exportJson">Salva dati</button>
+      <button id="importBtn">Carica dati</button>
+      <input type="file" id="importFile" accept="application/json" class="hide">
+    </div>
+  </div>
+  <div id="rooms"></div>
+  <p class="note">Le pareti tra stanze dello stesso piano non contano. Pavimento e soffitto sono considerati verso i piani non riscaldati, dove si perde più calore. I radiatori si stimano dalle misure: se conosci la potenza da catalogo (a ΔT50), scrivila e vale quella.</p>
+</div>
+
+<div id="out"></div>
+<p class="note">Strumento di stima: i valori sono tipici di massima, le potenze dei radiatori stimate hanno margini di errore (±15% acciaio e alluminio, ±30% ghisa). Prima di comprare confronta con un calcolo di un tecnico abilitato e verifica prevalenza e portata del circolatore sul circuito reale.</p>
+<div class="row no-print"><button onclick="window.print()">Stampa / salva PDF</button></div>
+</div>
+<div id="viewCald" class="hide"></div>
+<div id="viewPosto" class="hide"></div>
+</main>
+
+<script>
+//#CALC-START
+const EPOCHE={
+ nonso:{n:'Non so (valori medi)',wall:1.0,win:3.0,slab:1.2,roof:1.2,ach:0.6},
+ s70:{n:"Anni '60-'70: muro non isolato, vetro singolo",wall:1.3,win:4.8,slab:1.2,roof:1.8,ach:0.8},
+ s90:{n:"Anni '80-'90: doppio vetro semplice, poco isolante",wall:0.9,win:3.0,slab:1.2,roof:1.0,ach:0.6},
+ s2000:{n:'Anni 2000: isolata, doppio vetro basso emissivo',wall:0.5,win:1.8,slab:1.2,roof:0.45,ach:0.5},
+ nuova:{n:'Ristrutturata / cappotto, serramenti nuovi',wall:0.3,win:1.4,slab:1.2,roof:0.3,ach:0.5}};
+const COMUNI=[['Altro (inserisco io)',''],['Torino',-8],['Cuneo',-10],['Aosta',-10],['Milano',-5],['Bologna',-5],['Firenze',0],['Roma',0],['Napoli',2],['Palermo',5]];
+const SCEN=[[70,60],[60,50],[55,45],[50,40],[45,35]];
+const PIPES=[['Rame 12×1',10],['Rame 14×1',12],['Rame 16×1',14],['Rame 18×1',16],['Rame 22×1',20],['Rame 28×1,5',25],['Rame 35×1,5',32],['Rame 42×1,5',39]];
+const VESSELS=[8,12,18,24,35,50,80];
+const ALU={350:85,500:115,600:135,700:155,800:175};            // W per elemento a ΔT50 (tipici)
+const ACC_M={'11':940,'21':1290,'22':1666,'33':2335};            // W per metro, altezza 600, ΔT50 (22: Kermi FK0 e Mexen C22 1653 W/m; 33: Mexen C33 2335 W/m; 11 e 21 stimati)
+const ACC_H={300:0.52,400:0.70,500:0.86,600:1.0,700:1.15,900:1.42};
+const GHI={2:{500:60,600:70,700:80,800:90},3:{500:70,600:85,700:100,800:115},4:{500:90,600:110,700:125,800:140}}; // grossolano
+const TUB_COL={2:0.46,3:0.64,4:0.80,5:0.91,6:1.0};            // acciaio tubolare: fattore per numero di colonne (stima)
+const TUB_H={500:0.85,600:1.0,750:1.25,900:1.45,1000:1.58,1200:1.85,1500:2.25,1800:2.65}; // fattore per altezza (stima)
+const TUB_BASE=97, TUB_W=46, TUB_END=26; // W per elemento a 6 colonne h600 a ΔT50 (scheda Irsap Tesi 6, da confermare); larghezza elemento 46 mm + 26 mm di testate (catalogo De'Longhi Multicolonna)
+const tubEl=(col,h)=>TUB_BASE*(TUB_COL[col]||1)*(TUB_H[h]||1);
+const num=(x,d=0)=>{const v=parseFloat(String(x).replace(',','.'));return isFinite(v)?v:d};
+const r1=x=>(Math.round(x*10)/10).toString().replace('.',',');
+function radW(a){
+  if(num(a.w)>0)return num(a.w);
+  if(a.tipo==='alu')return (ALU[num(a.h,600)]||0)*num(a.n);
+  if(a.tipo==='acc')return (ACC_M[a.acc]||0)*(ACC_H[num(a.h,600)]||1)*num(a.len)/1000;
+  if(a.tipo==='ghisa')return ((GHI[num(a.col,3)]||{})[num(a.h,600)]||0)*num(a.n);
+  if(a.tipo==='tub')return tubEl(num(a.col,6),num(a.h,600))*num(a.n);
+  return 0}
+function eExp(T){const t=[10,20,30,40,50,60,70,80,90],r=[999.7,998.2,995.7,992.2,988.0,983.2,977.8,971.8,965.3];
+  T=Math.min(90,Math.max(10,T));let i=0;while(i<t.length-2&&T>t[i+1])i++;
+  const rho=r[i]+(r[i+1]-r[i])*(T-t[i])/(t[i+1]-t[i]);return 999.7/rho-1}
+function wallLen(r){const L=num(r.L),W=num(r.W),mx=Math.max(L,W),mn=Math.min(L,W);return ({'0':0,'1L':mx,'1S':mn,'2':L+W,'3':L+W+mx})[r.ext]??0}
+function roomCalc(r,g){
+  const P=EPOCHE[g.epoca]||EPOCHE.nonso;
+  const Te=num(g.Te),Ti=num(r.Ti,20),H=num(r.H,0)||num(g.H,2.7),A=num(r.L)*num(r.W),V=A*H,dTe=Ti-Te;
+  const win=num(r.winArea)>0?num(r.winArea):num(r.nWin)*num(r.winSize);
+  const wallA=Math.max(0,wallLen(r)*H-win);
+  const Uw=num(r.wallU)>0?num(r.wallU):P.wall, Uv=num(r.winU)>0?num(r.winU):P.win;
+  const Uf=num(r.floorU)>0?num(r.floorU):P.slab, Uc=num(r.ceilU)>0?num(r.ceilU):(r.ceilTo==='out'?P.roof:P.slab);
+  const Uo=num(r.otherU)>0?num(r.otherU):P.wall;
+  const Tf=({unh:num(g.TuBelow),heated:Ti,ground:10,out:Te})[r.floorTo]??num(g.TuBelow);
+  const Tc=({unh:num(g.TuAbove),heated:Ti,out:Te})[r.ceilTo]??num(g.TuAbove);
+  const pWall=Uw*wallA*dTe, pWin=Uv*win*dTe, pFloor=Uf*A*(Ti-Tf), pCeil=Uc*A*(Ti-Tc);
+  const pOther=Uo*num(r.otherArea)*(Ti-num(g.TuSide));
+  const pT=Math.max(0,(pWall+pWin+pFloor+pCeil+pOther)*(1+num(g.tb)/100));
+  const n=(r.ach===''||r.ach==null)?P.ach:num(r.ach,P.ach);
+  const pV=Math.max(0,0.34*n*V*dTe);
+  const pR=(pT+pV)*num(g.rip)/100;
+  const tot=pT+pV+pR;
+  const have=(r.rads||[]).reduce((s,a)=>s+radW(a),0);
+  return {Ti,A,V,H,dTe,wallA,win,pWall,pWin,pFloor,pCeil,pOther,pT,pV,pR,tot,wm2:A>0?tot/A:0,have};
+}
+function phi50(phi,Tmean,Ti,n){const d=Tmean-Ti;return d<=0?Infinity:phi/Math.pow(d/50,n)}
+function pipeFor(Q,vmax){
+  for(const [name,di] of PIPES){const a=Math.PI*Math.pow(di/1000,2)/4,v=Q/3.6e6/a;if(v<=vmax)return {name,di,v}}
+  const [name,di]=PIPES[PIPES.length-1];const a=Math.PI*Math.pow(di/1000,2)/4;return {name,di,v:Q/3.6e6/a}}
+function equiv(w){ // equivalenti indicativi di una potenza a ΔT50
+  if(!isFinite(w)||w<=0)return '—';
+  return `alluminio h600: ${Math.ceil(w/ALU[600])} el. · tubolare 6 col h600: ${Math.ceil(w/tubEl(6,600))} el. · piastra 22 H600: ${Math.ceil(w/ACC_M['22']*10)*100} mm`}
+function sysCalc(S){
+  const g=S.g,n=num(g.expo,1.3);
+  const Tm=num(g.Tm),Tr=num(g.Tr),dTw=Math.max(1,Tm-Tr),Tmean=(Tm+Tr)/2,TfMax=num(g.TfMax,70);
+  const rooms=S.rooms.map(r=>({r,c:roomCalc(r,g)}));
+  // taratura sul funzionamento reale (facoltativa): in un giorno con Te nota bastava la mandata calTf
+  let k=1,cal=null;
+  const kFix=num(g.kFix); // taratura da una lettura della caldaia: ha la precedenza
+  const hasCal=!(kFix>0)&&g.calTe!==''&&g.calTe!=null&&g.calTf!==''&&g.calTf!=null&&isFinite(parseFloat(g.calTe))&&isFinite(parseFloat(g.calTf));
+  if(kFix>0){k=kFix;cal={k,fixed:true};
+    rooms.forEach(x=>{for(const p of ['pWall','pWin','pFloor','pCeil','pOther','pT','pV','pR','tot','wm2'])x.c[p]*=k});}
+  if(hasCal){
+    let model=0,rad=0;
+    const hasTr=g.calTr!==''&&g.calTr!=null&&isFinite(parseFloat(g.calTr));
+    const calDtw=hasTr?Math.max(1,num(g.calTf)-num(g.calTr)):dTw; // salto di quel giorno se noto, altrimenti quello di progetto
+    for(const x of rooms){if(x.c.have>0){
+      model+=roomCalc(x.r,Object.assign({},g,{Te:num(g.calTe)})).tot;
+      rad+=x.c.have*Math.pow(Math.max(num(g.calTf)-calDtw/2-x.c.Ti,0)/50,n);}}
+    if(model>0&&rad>0){k=rad/model;cal={k,model,rad};
+      rooms.forEach(x=>{for(const p of ['pWall','pWin','pFloor','pCeil','pOther','pT','pV','pR','tot','wm2'])x.c[p]*=k});}
+  }
+  const tot=rooms.reduce((s,x)=>s+x.c.tot,0), area=rooms.reduce((s,x)=>s+x.c.A,0);
+  const boilerW=tot*(1+num(g.marg)/100);
+  const Qtot=tot*0.86/dTw;
+  rooms.forEach(x=>{
+    const c=x.c;
+    c.scen=SCEN.concat([[Tm,Tr]]).map(([m,r])=>phi50(c.tot,(m+r)/2,c.Ti,n)); // l'ultimo = tua mandata/ritorno
+    c.cur=phi50(c.tot,Tmean,c.Ti,n);
+    c.Q=c.tot*0.86/dTw;
+    const facD=Math.pow(Math.max(Tmean-c.Ti,1e-6)/50,n), facM=Math.pow(Math.max(TfMax-dTw/2-c.Ti,1e-6)/50,n);
+    c.facD=facD;c.facM=facM;
+    if(c.have>0){
+      c.avail=c.have*facD;c.availMax=c.have*facM;
+      c.ratio=c.tot/c.have;c.dTmNeed=50*Math.pow(c.ratio,1/n);c.TmNeed=c.Ti+c.dTmNeed;c.TfNeed=c.TmNeed+dTw/2;
+      c.ok=c.avail>=c.tot;c.okMax=c.availMax>=c.tot;c.over=c.TfNeed>TfMax;
+      c.extraD=Math.max(0,c.tot-c.avail)/facD;c.extraM=Math.max(0,c.tot-c.availMax)/facM;
+    }else{
+      c.avail=0;c.availMax=0;c.dTmNeed=Tmean-c.Ti;c.TmNeed=Tmean;c.TfNeed=Tm;c.ok=null;c.okMax=null;c.over=false;
+      c.extraD=c.tot/facD;c.extraM=c.tot/facM;
+    }
+  });
+  const dTc=num(g.dTp,10)||dTw; // salto che imposto sul circolatore (par. 34): vale per curva e consigli
+  const Ted=num(g.Te),curve=[];
+  for(let Te=15;Te>=Math.min(Ted,-15);Te-=1){
+    let f=-Infinity;
+    for(const x of rooms){
+      const Ti=x.c.Ti;if(Te>=Ti){f=Math.max(f,Ti);continue}
+      const kk=(Ti-Ted)<=0?0:(Ti-Te)/(Ti-Ted);
+      f=Math.max(f,Ti+x.c.dTmNeed*Math.pow(Math.max(kk,0),1/n)+dTc/2);
+    }
+    if(isFinite(f))curve.push([Te,f]);
+  }
+  const worst=rooms.reduce((a,x)=>(a==null||x.c.TfNeed>a.c.TfNeed)?x:a,null);
+  const withRad=rooms.filter(x=>x.c.have>0).length;
+  const kW=boilerW/1000;
+  const Vimp=num(g.Vover)>0?num(g.Vover):kW*num(g.Vkw,11);
+  const e=eExp(num(g.Tmax,80)),Pf=num(g.Psv,3)-0.5,Pi=num(g.Pi,1);
+  const den=1-(Pi+1)/(Pf+1);
+  const Vn=den>0?Vimp*e/den:NaN;
+  const Vstd=VESSELS.find(v=>v>=Vn)||null;
+  const mainPipe=pipeFor(Qtot,1.0);
+  const Hm=((num(g.Lcirc,40)*150*1.3)+10000)/9810;
+  return {rooms,tot,area,boilerW,kW,Qtot,dTw,dTc,Tmean,TfMax,curve,worst,withRad,Vimp,e,Pf,Vn,Vstd,mainPipe,Hm,n,k,cal,wm2:area>0?tot/area:0};
+}
+// soluzioni per una stanza che non basta: radiatori da aggiungere + modi di ridurre il carico
+function solutions(S,x,R){
+  const g=S.g,r=x.r,c=x.c,k=R.k||1;
+  const P=EPOCHE[g.epoca]||EPOCHE.nonso;
+  const tot0=c.tot;
+  const calc=(gm,rm)=>roomCalc(rm,gm).tot*k;
+  const withR=o=>calc(g,Object.assign({},r,o));
+  const opts=[];
+  const add=(id,label,after,note)=>{const dW=tot0-after;if(dW>=15)opts.push({id,label,dW,after,note:note||'',okD:c.have>0&&after<=c.avail,okM:c.have>0&&after<=c.availMax})};
+  const Uv=num(r.winU)>0?num(r.winU):P.win;
+  const Uw=num(r.wallU)>0?num(r.wallU):P.wall;
+  const Uf=num(r.floorU)>0?num(r.floorU):P.slab, Uc=num(r.ceilU)>0?num(r.ceilU):(r.ceilTo==='out'?P.roof:P.slab);
+  const ach=(r.ach===''||r.ach==null)?P.ach:num(r.ach,P.ach);
+  const comb={},gComb=Object.assign({},g);
+  if(c.win>0&&Uv>1.45){add('win',`Finestre nuove con U 1,4 (ora circa ${r1(Uv)})`,withR({winU:1.4}));comb.winU=1.4}
+  if(ach>0.5){add('ach',`Meno spifferi: ricambi d'aria 0,5 volumi/ora (ora ${r1(ach)})`,withR({ach:0.5}));comb.ach=0.5}
+  if(r.ext!=='0'&&Uw>0.6){add('wall',`Isolare la parete esterna (cappotto: U 0,3 invece di ${r1(Uw)})`,withR({wallU:0.3}));comb.wallU=0.3}
+  const sl={};
+  if(r.floorTo==='unh'&&Uf>0.6)sl.floorU=0.45;
+  if(r.ceilTo==='unh'&&Uc>0.6)sl.ceilU=0.45;
+  if(Object.keys(sl).length){add('slab','Isolare il solaio sopra e/o sotto (U 0,45)',withR(sl));Object.assign(comb,sl)}
+  if(num(g.rip)>0){add('rip','Riscaldamento sempre acceso, senza maggiorazione di ripresa',calc(Object.assign({},g,{rip:0}),r),'solo se lo tieni acceso di continuo');gComb.rip=0}
+  if(r.floorTo==='unh'||r.ceilTo==='unh'){
+    const tb=num(g.TuBelow),ta=num(g.TuAbove);
+    add('tu',`Se i piani sopra/sotto restano a ${r1(tb+3)}/${r1(ta+3)} °C invece di ${r1(tb)}/${r1(ta)} (scale aperte, un po' di calore che sale o scende)`,calc(Object.assign({},g,{TuBelow:tb+3,TuAbove:ta+3}),r),'da verificare misurando la temperatura di quei piani');
+  }
+  add('ti',`Stanza a ${r1(c.Ti-1)} °C invece di ${r1(c.Ti)}`,withR({Ti:c.Ti-1}));
+  const allAfter=calc(gComb,Object.assign({},r,comb));
+  return {opts:opts.sort((a,b)=>b.dW-a.dW),allAfter,allOkD:c.have>0&&allAfter<=c.avail,allOkM:c.have>0&&allAfter<=c.availMax,
+    extraD:c.extraD,extraM:c.extraM};
+}
+// aggiungere o sostituire i radiatori di una stanza per lo scenario di mandata/ritorno scelto (indice in SCEN)
+function replCalc(x,scIdx){
+  const c=x.c,need=c.scen[scIdx],have=c.have,miss=Math.max(0,need-have);
+  const first=(x.r.rads||[])[0]||null;
+  const em=(n,w,e)=>`${n} el. (${n*w+(e||0)} mm)`;
+  let add='—';
+  if(have>0&&miss<=1)add='nessuna aggiunta';
+  else if(first&&['alu','ghisa','tub'].includes(first.tipo)){
+    const per0=first.tipo==='alu'?ALU[num(first.h,600)]:first.tipo==='ghisa'?(GHI[num(first.col,3)]||{})[num(first.h,600)]:tubEl(num(first.col,6),num(first.h,600));
+    const per=(num(first.w)>0&&num(first.n)>0)?num(first.w)/num(first.n):per0; // se conosci la potenza del radiatore, uso quella per elemento
+    if(per)add=`+${Math.ceil(miss/per)} el. sul primo`;
+  }else if(first&&first.tipo==='acc'){
+    const perM=(ACC_M[first.acc]||0)*(ACC_H[num(first.h,600)]||1);
+    if(perM)add=`+${Math.ceil(miss/perM*10)*100} mm`;
+  }
+  const t6=tubEl(6,600),t9=tubEl(6,900);
+  return {need,have,miss,add,
+    tub600:em(Math.ceil(need/t6),TUB_W,TUB_END),tub900:em(Math.ceil(need/t9),TUB_W,TUB_END),
+    acc22:`${Math.ceil(need/ACC_M['22']*10)*100} mm`,alu600:em(Math.ceil(need/ALU[600]),80)};
+}
+// ---- letture della caldaia: salto mandata-ritorno e stime ----
+const PAR4=[[0,2.5],[10,4.61],[20,6.75],[30,9.25],[40,11.87],[50,14.14],[60,16.5],[70,18.75],[78,20],[80,20.75],[90,23.2],[99,25]]; // City Class 25 K: valore del par. 04 -> portata termica in kW (libretto p. 37)
+function par4kW(p){p=Math.min(99,Math.max(0,num(p,78)));for(let i=1;i<PAR4.length;i++){if(p<=PAR4[i][0]){const a=PAR4[i-1],b=PAR4[i];return a[1]+(b[1]-a[1])*(p-a[0])/(b[0]-a[0])}}return 25}
+const DT_PAR34=[20,15,10,5]; // par. 34: 0=20 K, 1=15 K, 2=10 K, 3=5 K
+function lettura(l,cald,S){
+  const has=v=>v!==''&&v!=null&&isFinite(parseFloat(v));
+  if(!has(l.Tm)||!has(l.Tr))return null;
+  const Tm=num(l.Tm),Tr=num(l.Tr),dT=Tm-Tr,mean=(Tm+Tr)/2;
+  let stato,cls;
+  if(dT<=0){stato='Il ritorno non può essere uguale o più alto della mandata: ricontrolla le letture.';cls='bad'}
+  else if(dT>=20){stato='Salto alto: passa poca acqua. Pompa lenta o che modula, valvole o detentori troppo chiusi, oppure fanghi nella ghisa.';cls='warn'}
+  else if(dT>=10){stato='Salto normale: i radiatori lavorano bene.';cls='ok'}
+  else if(dT>=5){stato="Salto basso: tanta acqua rispetto al calore ceduto. Va bene se le stanze sono già a temperatura; se sono fredde, i radiatori non cedono calore.";cls='warn'}
+  else{stato="Salto molto basso: l'acqua torna quasi alla temperatura di mandata. Richiesta quasi nulla oppure radiatori che non cedono calore (aria, fanghi, circuiti in bypass).";cls='warn'}
+  const par=(cald&&cald.par)||{};
+  let atteso=null;
+  if(has(par.p33)&&has(par.p34)&&(num(par.p33)===1||num(par.p33)===2)&&num(par.p34)>=0&&num(par.p34)<=3)atteso=DT_PAR34[num(par.p34)];
+  const m=has(l.mod)?num(l.mod):null;
+  let Q=null,flow=null,eta=null,Qin=null;
+  if(m!==null&&m>0){const Qmax=par4kW(has(par.p04)?par.p04:78);Qin=2.5+(Qmax-2.5)*Math.min(m,100)/100;
+    eta=0.90+0.07*Math.min(1,Math.max(0,(55-Tr)/25));Q=Qin*eta*1000;if(dT>0.5)flow=Q*0.86/dT}
+  let modelLoad=null,kSug=null;
+  if(has(l.Te)&&S&&S.rooms&&S.rooms.length){
+    modelLoad=S.rooms.reduce((s,r)=>{const c=roomCalc(r,Object.assign({},S.g,{Te:num(l.Te)}));return s+c.pT+c.pV},0); // senza maggiorazione di ripresa: a regime
+    if(Q!==null&&modelLoad>0)kSug=Q/modelLoad}
+  return {dT,mean,stato,cls,atteso,Q,Qin,eta,flow,modelLoad,kSug};
+}
+// ---- parametri consigliati: calcolati dai dati inseriti (stanze, radiatori, salto scelto) ----
+function recParams(S,R){
+  const g=S.g,dTp=num(g.dTp,10);
+  const i34=DT_PAR34.reduce((b,v,i)=>Math.abs(v-dTp)<Math.abs(DT_PAR34[b]-dTp)?i:b,0);
+  const needIn=R.boilerW/1000/0.9*1.5; // portata termica d'ingresso con margine per la ripresa
+  let p04=PAR4[PAR4.length-1][0],kW=PAR4[PAR4.length-1][1];
+  for(const [p,k] of PAR4){if(k>=needIn){p04=p;kW=k;break}}
+  let gh=0,tot=0;for(const r of S.rooms)for(const a of (r.rads||[])){const w=radW(a);tot+=w;if(a.tipo==='ghisa')gh+=w}
+  const share=tot>0?gh/tot:0;
+  return {p34:i34,dT:DT_PAR34[i34],p04,kW,needIn,inerzia:share>=0.5?14:(share>=0.2?12:10),share};
+}
+// ---- controlli di coerenza sui dati inseriti ----
+function checks(S,R){
+  const g=S.g,out=[],has=v=>v!==''&&v!=null&&isFinite(parseFloat(v));
+  if(!R.rooms.length)return [{cls:'warn',txt:'Non ci sono stanze.'}];
+  for(const x of R.rooms){const r=x.r,c=x.c,nm=r.name||'Stanza';
+    if(!(c.A>0))out.push({cls:'bad',txt:`${nm}: lunghezza e larghezza mancano, la stanza non pesa nel calcolo.`});
+    if(wallLen(r)*c.H<c.win-0.01&&c.win>0)out.push({cls:'warn',txt:`${nm}: le finestre (${r1(c.win)} m²) sono più grandi delle pareti esterne (${r1(wallLen(r)*c.H)} m²).`});
+    if(c.Ti<15||c.Ti>26)out.push({cls:'warn',txt:`${nm}: temperatura interna ${c.Ti} °C insolita.`});
+    if(c.H<2.2||c.H>4)out.push({cls:'warn',txt:`${nm}: altezza ${r1(c.H)} m insolita.`});
+    if(c.have<=0)out.push({cls:'warn',txt:`${nm}: nessun radiatore inserito, non posso dire se bastano.`});
+    for(const a of (r.rads||[])){if(a.tipo==='altro'&&!(num(a.w)>0))out.push({cls:'warn',txt:`${nm}: un radiatore «altro» senza potenza non conta.`});
+      if(a.tipo==='ghisa'&&!(num(a.w)>0))out.push({cls:'note',txt:`${nm}: ghisa con potenza stimata (±30 %): se la conosci scrivila.`})}}
+  if(num(g.Tm)<=num(g.Tr))out.push({cls:'bad',txt:'Mandata di progetto uguale o sotto il ritorno.'});
+  if(num(g.Tm)>num(g.TfMax,70))out.push({cls:'warn',txt:`La mandata di progetto (${num(g.Tm)} °C) supera il limite di ${num(g.TfMax,70)} °C.`});
+  if(R.k<0.4||R.k>1.5)out.push({cls:'warn',txt:`La taratura cambia il carico di ×${r1(R.k)}: valore insolito, ricontrolla i dati della taratura.`});
+  const sl=(S.cald&&S.cald.letture)||[];
+  if(sl.some(l=>has(l.Tm)&&has(l.Tr)&&!has(l.Te)))out.push({cls:'note',txt:'Alcune letture non hanno la temperatura esterna: non servono per tarare il carico.'});
+  return out}
+// ---- curva climatica dell'RC21 (fig. 12 del manuale): retta da (27 °C esterni, 20 °C di mandata) ----
+function otcCap(curva,off,Te,tmin,tmax){return Math.min(tmax,Math.max(tmin,20+0.322*curva*(27-Te)+off))}
+function otcFit(S,dTw,tmin){
+  const g=S.g,R=sysCalc(S),n=num(g.expo,1.3),Ted=num(g.Te),TfMax=num(g.TfMax,70);
+  if(!R.rooms.length)return null;
+  const need=Te=>{let f=-Infinity;for(const x of R.rooms){const Ti=x.c.Ti;if(Te>=Ti){f=Math.max(f,Ti);continue}
+    const kk=(Ti-Ted)<=0?0:(Ti-Te)/(Ti-Ted);f=Math.max(f,Ti+x.c.dTmNeed*Math.pow(Math.max(kk,0),1/n)+dTw/2)}return f};
+  // (dTw = salto del circolatore passato dal chiamante)
+  const tg={};for(let Te=Math.round(Ted);Te<=15;Te++)tg[Te]=Math.min(need(Te)+2,TfMax);
+  let best=null;
+  for(let nn=0.5;nn<=9.001;nn+=0.1)for(let off=-15;off<=10;off++){
+    let ok=true,ex=0;
+    for(const Te in tg){const L=otcCap(nn,off,+Te,tmin,TfMax);if(L<tg[Te]-0.5){ok=false;break}ex+=L-tg[Te]}
+    if(ok&&(!best||ex<best.ex))best={curva:Math.round(nn*10)/10,off,ex};
+  }
+  const TES=[15,10,5,0,-5,-8].filter(t=>t>=Ted-0.01||t===-5||t===-8);
+  const caps=TES.map(Te=>({Te,need:need(Te),cap:best?otcCap(best.curva,best.off,Te,tmin,TfMax):null}));
+  return {best,caps,TfMax};
+}
+// consigli in base a una lettura
+function consigli(l,cald,S){
+  const d=lettura(l,cald,S);if(!d)return [];
+  const has=v=>v!==''&&v!=null&&isFinite(parseFloat(v));
+  const out=[];
+  if(d.dT>=20)out.push({cls:'warn',txt:`Salto ${r1(d.dT)} K: passa poca acqua. Metti par. 33 = 1 e par. 34 = 2 (10 K), apri bene i detentori, spurga i radiatori e controlla i fanghi nella ghisa; poi rileggi dopo 30-60 minuti.`});
+  else if(d.dT>=10)out.push({cls:'ok',txt:`Salto ${r1(d.dT)} K: normale, non toccare altro sulla portata.`});
+  else if(d.dT>0)out.push({cls:'warn',txt:`Salto ${r1(d.dT)} K: se le stanze sono a temperatura va bene. Se sono fredde con la mandata alta i radiatori non cedono calore: spurgo aria, fanghi, circuiti in bypass oppure sono semplicemente al limite.`});
+  if(d.atteso!=null&&d.dT>0&&Math.abs(d.dT-d.atteso)>5)out.push({cls:'warn',txt:`Il salto letto è lontano da quello impostato (${d.atteso} K): il circolatore non lo sta seguendo. Controlla par. 33, 34 e 35 e se c'è aria nel circolatore.`});
+  if(has(l.setM)&&has(l.Tm)&&num(l.Tm)<num(l.setM)-5)out.push({cls:'warn',txt:'La mandata è più di 5 °C sotto il set: la caldaia non arriva alla temperatura chiesta (potenza limitata dal par. 04, riscaldamento ancora in corso o scambiatore sporco).'});
+  if(has(l.Tr)&&num(l.Tr)>55)out.push({cls:'note',txt:'Ritorno sopra 55 °C: in questo momento la caldaia non condensa. Normale nei giorni più freddi con questi radiatori.'});
+  if(has(l.press)&&(num(l.press)<0.8||num(l.press)>2.5))out.push({cls:'warn',txt:`Pressione ${l.press} bar: il libretto indica 1-1,5 bar a freddo e sotto 0,5 bar la caldaia si ferma. Controlla il carico e il vaso.`});
+  return out}
+//#CALC-END
+
+/* ---------- stato ---------- */
+const KEY='riscaldamento-villetta-v2';
+const defG=()=>({Te:-5,epoca:'nonso',H:2.7,TuAbove:12,TuBelow:12,TuSide:10,tb:10,rip:10,marg:5,Tm:55,Tr:45,expo:1.3,Tmax:80,Pi:1.0,Psv:3.0,Vkw:11,Vover:'',Lcirc:40,TfMax:70,calTe:'',calTf:'',calTr:'',kFix:'',dTp:10,scIdx:1});
+const defCald=()=>({par:{p02:'',p04:'',p05:'',p06:'',p33:'',p34:'',p35:'',inerzia:'',setMin:'',setMax:'',sondaAmb:'',modAmb:'',sondaEst:'',curva:'',offset:'',isteresi:''},letture:[]});
+let lid=1;
+let uid=1,rid=1;
+const newRad=(o={})=>Object.assign({id:rid++,tipo:'alu',n:10,h:600,col:3,acc:'22',len:1000,w:''},o);
+const newRoom=(o={})=>Object.assign({id:uid++,name:'Stanza',tipo:'Soggiorno',Ti:20,L:4,W:4,H:'',ext:'1L',nWin:1,winSize:1.7,
+  floorTo:'unh',ceilTo:'unh',wallU:'',winU:'',floorU:'',ceilU:'',winArea:'',otherArea:'',otherU:'',ach:'',rads:[newRad()]},o);
+const example=()=>({g:defG(),rooms:[
+  newRoom({name:'Soggiorno',L:5,W:4.5,ext:'2',nWin:2,winSize:1.7,rads:[newRad({n:12}),newRad({n:8})]}),
+  newRoom({name:'Camera',tipo:'Camera',L:4,W:3.5,ext:'1S',nWin:1,winSize:1.7,rads:[newRad({n:10})]}),
+  newRoom({name:'Bagno',tipo:'Bagno',Ti:24,L:2.5,W:2.5,ext:'1S',nWin:1,winSize:0.6,rads:[newRad({tipo:'altro',w:450})]}),
+  newRoom({name:'Corridoio',tipo:'Corridoio',Ti:18,L:3,W:1.2,ext:'0',nWin:0,rads:[]})]});
+let S;
+try{const raw=localStorage.getItem(KEY);S=raw?JSON.parse(raw):example()}catch(e){S=example()}
+if(!S||!S.g||!Array.isArray(S.rooms))S=example();
+function normalize(){S.g=Object.assign(defG(),S.g);S.rooms.forEach(r=>{if(!Array.isArray(r.rads))r.rads=[]});
+  S.cald=Object.assign(defCald(),S.cald||{});S.cald.par=Object.assign(defCald().par,S.cald.par||{});if(!Array.isArray(S.cald.letture))S.cald.letture=[];
+  lid=Math.max(0,...S.cald.letture.map(l=>l.id||0))+1;if(!S.view)S.view='calc';
+  S.posto=Object.assign({cfg:'A',done:{},ck:{Te:'',setM:''}},S.posto||{});S.posto.done=S.posto.done||{};S.posto.ck=Object.assign({Te:'',setM:''},S.posto.ck||{});
+  uid=Math.max(0,...S.rooms.map(r=>r.id||0))+1;rid=Math.max(0,...S.rooms.flatMap(r=>r.rads.map(a=>a.id||0)))+1}
+normalize();
+const save=()=>{try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}};
+
+/* ---------- editor ---------- */
+const G_FIELDS=[['H','Altezza interna (m)',0.05],['TuBelow','Temp. piano sotto non riscaldato (°C)',1],['TuAbove','Temp. piano sopra non riscaldato (°C)',1],['TuSide','Temp. vani laterali non riscaldati (°C)',1],['tb','Ponti termici (%)',1],['rip','Maggiorazione ripresa (%)',1],['marg','Margine distribuzione/caldaia (%)',1],['expo','Esponente radiatori n',0.05],['Tmax','Temp. max acqua (°C)',1],['Pi','Precarica vaso (bar)',0.1],['Psv','Taratura valvola sicurezza (bar)',0.5],['Vkw','Acqua impianto (L per kW)',1],['Vover','Volume impianto, se noto (L)',1],['Lcirc','Lunghezza circuito più lungo A+R (m)',1],['calTe','Taratura (facoltativa): temperatura esterna di un giorno reale (°C)',1],['calTf','Taratura: mandata che in quel giorno bastava (°C)',1],['calTr','Taratura: ritorno di quel giorno, se lo sai (°C)',1]];
+const optsS=(list,val)=>list.map(([v,t])=>`<option value="${v}"${String(v)===String(val)?' selected':''}>${t}</option>`).join('');
+const fld=(label,key,val,step,attr='data-k')=>`<label>${label}<input type="number" step="${step||'any'}" ${attr}="${key}" value="${val??''}"></label>`;
+function renderG(){
+  document.getElementById('gForm').innerHTML=G_FIELDS.map(([k,l,s])=>`<label>${l}<input type="number" step="${s}" data-g="${k}" value="${S.g[k]}"></label>`).join('');
+  document.getElementById('epoca').innerHTML=Object.entries(EPOCHE).map(([k,v])=>`<option value="${k}"${k===S.g.epoca?' selected':''}>${v.n}</option>`).join('');
+  document.getElementById('comune').innerHTML=COMUNI.map(([n,t])=>`<option value="${t}"${t!==''&&t===S.g.Te?' selected':''}>${n}${t!==''?' ('+t+' °C)':''}</option>`).join('');
+  document.querySelectorAll('input[data-g="Te"],input[data-g="Tm"],input[data-g="Tr"],input[data-g="TfMax"]').forEach(i=>i.value=S.g[i.dataset.g]);
+  const sp=document.querySelector('select[data-g="dTp"]');if(sp)sp.value=String(S.g.dTp);
+}
+function radHTML(a){
+  const H=[350,500,600,700,800];
+  let f='';
+  if(a.tipo==='alu')f=fld('Elementi','n',a.n,1,'data-rk')+`<label>Altezza (interasse mm)<select data-rk="h">${optsS([[350,'350'],[500,'500'],[600,'600'],[700,'700'],[800,'800']],a.h)}</select></label>`;
+  else if(a.tipo==='acc')f=`<label>Tipo piastra<select data-rk="acc">${optsS([['11','11 (1 piastra)'],['21','21'],['22','22 (2 piastre)'],['33','33 (3 piastre)']],a.acc)}</select></label>`+`<label>Altezza (mm)<select data-rk="h">${optsS([[300,'300'],[400,'400'],[500,'500'],[600,'600'],[700,'700'],[900,'900']],a.h)}</select></label>`+fld('Lunghezza (mm)','len',a.len,50,'data-rk');
+  else if(a.tipo==='tub')f=fld('Elementi','n',a.n,1,'data-rk')+`<label>Colonne<select data-rk="col">${optsS([[2,'2'],[3,'3'],[4,'4'],[5,'5'],[6,'6']],a.col)}</select></label>`+`<label>Altezza (mm)<select data-rk="h">${optsS([[500,'500'],[600,'600'],[750,'750'],[900,'900'],[1000,'1000'],[1200,'1200'],[1500,'1500'],[1800,'1800']],a.h)}</select></label>`;
+  else if(a.tipo==='ghisa')f=fld('Elementi','n',a.n,1,'data-rk')+`<label>Colonne<select data-rk="col">${optsS([[2,'2'],[3,'3'],[4,'4']],a.col)}</select></label>`+`<label>Altezza (mm)<select data-rk="h">${optsS([[500,'500'],[600,'600'],[700,'700'],[800,'800']],a.h)}</select></label>`;
+  return `<div class="rad" data-rid="${a.id}"><div class="grid">
+   <label>Radiatore<select data-rk="tipo">${optsS([['alu','Alluminio'],['tub','Acciaio tubolare'],['acc','Acciaio a piastra'],['ghisa','Ghisa'],['altro','Altro / scaldasalviette']],a.tipo)}</select></label>
+   ${f}${fld('Potenza nota a ΔT50 (W, facoltativa)','w',a.w,10,'data-rk')}
+   <div><label>Stima</label><div class="rest" data-rest="${a.id}">${Math.round(radW(a))||'—'} W</div></div>
+   <div style="align-self:end"><button class="x" data-delrad="${a.id}">Togli</button></div></div></div>`}
+function roomHTML(r){
+  const tipi=['Soggiorno','Cucina','Camera','Bagno','Corridoio','Altro'];
+  return `<details class="room" data-id="${r.id}" open><summary>${r.name||'Stanza'} <span class="note" data-sum="${r.id}"></span></summary>
+  <div class="grid" style="margin-top:8px">
+   <label>Nome<input type="text" data-k="name" value="${r.name}"></label>
+   <label>Tipo<select data-k="tipo">${tipi.map(t=>`<option${t===r.tipo?' selected':''}>${t}</option>`).join('')}</select></label>
+   ${fld('Temp. interna (°C)','Ti',r.Ti,1)}${fld('Lunghezza (m)','L',r.L,0.05)}${fld('Larghezza (m)','W',r.W,0.05)}
+   <label>Pareti verso l'esterno<select data-k="ext">${optsS([['0','nessuna'],['1L','una (lato lungo)'],['1S','una (lato corto)'],['2','due (angolo)'],['3','tre']],r.ext)}</select></label>
+   ${fld('N. finestre','nWin',r.nWin,1)}
+   <label>Dimensione finestre<select data-k="winSize">${optsS([[0.6,'piccola (0,6 m²)'],[1.2,'media (1,2 m²)'],[1.7,'normale (1,7 m²)'],[2.5,'grande (2,5 m²)'],[3.0,'portafinestra (3 m²)']],r.winSize)}</select></label>
+  </div>
+  <h3 style="font-size:13px;color:var(--mut);margin:12px 0 0">Radiatori in questa stanza</h3>
+  ${r.rads.map(radHTML).join('')}
+  <div class="row" style="margin-top:8px"><button class="x" data-addrad="${r.id}">+ Radiatore</button><button class="x" data-dup="${r.id}">Duplica stanza</button><button class="x" data-del="${r.id}">Elimina stanza</button></div>
+  <details class="adv"><summary>Dettagli (se li conosci)</summary><div class="grid" style="margin-top:8px">
+   ${fld('Altezza (m, vuoto = generale)','H',r.H,0.05)}${fld('Area finestre totale (m²)','winArea',r.winArea,0.1)}
+   <label>Pavimento verso<select data-k="floorTo">${optsS([['unh','piano sotto non riscaldato'],['ground','terreno'],['heated','locale riscaldato']],r.floorTo)}</select></label>
+   <label>Soffitto verso<select data-k="ceilTo">${optsS([['unh','piano sopra non riscaldato'],['out','tetto / esterno'],['heated','locale riscaldato']],r.ceilTo)}</select></label>
+   ${fld('U parete (vuoto = automatico)','wallU',r.wallU,0.05)}${fld('U finestre','winU',r.winU,0.05)}${fld('U pavimento','floorU',r.floorU,0.05)}${fld('U soffitto','ceilU',r.ceilU,0.05)}
+   ${fld('Pareti verso vani non riscaldati (m²)','otherArea',r.otherArea,0.1)}${fld('Ricambi aria (1/h)','ach',r.ach,0.1)}
+  </div></details></details>`}
+function renderRooms(){document.getElementById('rooms').innerHTML=S.rooms.map(roomHTML).join('')||'<p class="note">Nessuna stanza: aggiungine una.</p>'}
+
+/* ---------- risultati ---------- */
+const f0=x=>isFinite(x)?Math.round(x).toLocaleString('it-IT'):'—';
+const f1=x=>isFinite(x)?x.toLocaleString('it-IT',{minimumFractionDigits:1,maximumFractionDigits:1}):'—';
+function solHTML(R,S){
+  const g=S.g,TfMax=R.TfMax,Tm=num(g.Tm),Tr=num(g.Tr);
+  const bad=R.rooms.filter(x=>x.c.ok!==true&&x.c.tot>100);
+  if(!bad.length)return '';
+  const items=bad.map(x=>{
+    const c=x.c,s=solutions(S,x,R);
+    let head;
+    if(c.have<=0)head=`<span class="warn">nessun radiatore inserito</span>: servono circa ${f0(c.cur)} W a ΔT50 per ${f0(c.tot)} W di carico a ${f0(Tm)}/${f0(Tr)}.`;
+    else if(c.okMax)head=`i radiatori danno ${f0(c.avail)} W a ${f0(Tm)}/${f0(Tr)} contro ${f0(c.tot)} W richiesti: <span class="warn">bastano solo alzando la mandata a circa ${f0(c.TfNeed)} °C</span> (limite ${f0(TfMax)} °C).`;
+    else head=`i radiatori danno ${f0(c.avail)} W a ${f0(Tm)}/${f0(Tr)} e ${f0(c.availMax)} W alla mandata massima di ${f0(TfMax)} °C, contro ${f0(c.tot)} W richiesti: <span class="bad">non bastano nemmeno alla mandata massima</span> (servirebbero ${f0(c.TfNeed)} °C).`;
+    const li=[];
+    li.push(`<li><b>Più radiatore:</b> ${c.have>0?'aggiungi o sostituisci con':'installa almeno'} <b>${c.have>0?'+':''}${f0(s.extraD)} W</b> (a ΔT50) per farcela a ${f0(Tm)}/${f0(Tr)} → ${equiv(s.extraD)}${s.extraM<=1?`; oppure nessun radiatore in più: basta alzare la mandata a circa ${f0(c.TfNeed)} °C`:(s.extraM<s.extraD-1?`; oppure <b>${c.have>0?'+':''}${f0(s.extraM)} W</b> se alzi la mandata a ${f0(TfMax)} °C → ${equiv(s.extraM)}`:'')}.</li>`);
+    if(c.have>0&&!c.ok){const trN=2*c.TmNeed-Tm;if(trN<Tm-3&&trN>Tr)li.push(`<li><b>Alzare il ritorno (senza aggiungere nulla):</b> con mandata ${f0(Tm)} °C la stanza basta se il ritorno sale a circa <b>${f0(trN)} °C</b> invece di ${f0(Tr)}: serve far passare più acqua (circolatore più veloce, detentori più aperti, impostazione del ritorno/ΔT della caldaia). Si perde un po' di condensazione sulle giornate più fredde.</li>`)}
+    if(s.opts.length)li.push(`<li><b>Ridurre il carico</b> (dal più efficace):<ul class="l">${s.opts.map(o=>`<li>${o.label}: <b>−${f0(o.dW)} W</b> (resta ${f0(o.after)} W)${o.okD?` <span class="ok">da solo basta a ${f0(Tm)}/${f0(Tr)}</span>`:(o.okM?' <span class="warn">basta solo con mandata alta</span>':'')}${o.note?` <span class="note">(${o.note})</span>`:''}</li>`).join('')}</ul></li>`);
+    if(s.opts.length>1)li.push(`<li><b>Tutti gli interventi insieme</b> (esclusa la stanza più fredda): carico circa ${f0(s.allAfter)} W${c.have>0?(s.allOkD?` → <span class="ok">basta a ${f0(Tm)}/${f0(Tr)}</span>`:(s.allOkM?` → <span class="warn">basta solo con mandata alta</span>`:` → <span class="bad">non basta ancora</span>`)):''}.</li>`);
+    li.push(`<li><b>Alternativa:</b> radiatore ventilato o ventilconvettore: a bassa temperatura rende molto di più di un radiatore normale (verifica la scheda del modello).</li>`);
+    return `<div style="border-top:1px solid var(--line);padding-top:8px;margin-top:8px"><b>${x.r.name}</b>: ${head}<ul class="l">${li.join('')}</ul></div>`}).join('');
+  return `<div class="card"><h2>Soluzioni</h2>${items}<p class="note">Prima di spendere: se in realtà la casa si scalda bene con una mandata bassa, il calcolo sta sovrastimando il carico (i punti più incerti sono la temperatura dei piani sopra e sotto, i ricambi d'aria e i valori dei muri). Nelle impostazioni avanzate c'è la «Taratura»: scrivi una giornata reale (temperatura esterna e mandata che bastava) e il programma corregge i carichi.</p></div>`}
+function replHTML(R,S){
+  const g=S.g,idx=Math.min(Math.max(parseInt(g.scIdx)||0,0),SCEN.length);
+  const rows=R.rooms.map(x=>{const o=replCalc(x,idx);
+    return `<tr><td>${x.r.name}</td><td>${f0(x.c.tot)}</td><td>${o.have>0?f0(o.have):'—'}</td><td><b>${f0(o.need)}</b></td><td>${o.have>0?(o.miss>1?`<span class="bad">${f0(o.miss)}</span>`:'<span class="ok">0</span>'):f0(o.need)}</td><td style="text-align:left">${o.add}</td><td style="text-align:left">${o.tub600}</td><td style="text-align:left">${o.tub900}</td><td style="text-align:left">${o.acc22}</td><td style="text-align:left">${o.alu600}</td></tr>`}).join('');
+  const sel=`<select data-g="scIdx" style="width:auto">${SCEN.concat([[num(g.Tm),num(g.Tr)]]).map(([m,r],i)=>`<option value="${i}"${i===idx?' selected':''}>${m}/${r} (salto ${m-r} K)${i===SCEN.length?' = tua':''}</option>`).join('')}</select>`;
+  return `<div class="card"><div class="row" style="justify-content:space-between"><h2 style="margin:0">Aggiungere o sostituire i radiatori</h2><label style="margin:0">Mandata/ritorno di progetto ${sel}</label></div>
+  <div class="tw" style="margin-top:8px"><table><tr><th>Stanza</th><th>Carico W</th><th>Esistente W (ΔT50)</th><th>Serve W (ΔT50)</th><th>Mancano W</th><th>Aggiungere (stesso tipo del primo)</th><th>Tubolare 6 col h600</th><th>Tubolare 6 col h900</th><th>Piastra 22 H600</th><th>Alluminio h600</th></tr>${rows}</table></div>
+  <p class="note">Con l'impianto a collettori ogni radiatore ha il suo circuito: la via più semplice è aggiungere elementi allo stesso radiatore o sostituirlo con uno più potente. Un secondo radiatore messo in serie al primo rende meno, perché l'acqua arriva già raffreddata: come regola pratica conta l'80-90% di quanto renderebbe da solo. Tubolare: circa 97 W per elemento a 6 colonne h600 (dalla scheda Irsap Tesi 6, da confermare) e 46 mm di larghezza per elemento più 26 mm di testate; le altre altezze e colonne sono stime ±20%. Alluminio 135 W per elemento h600 e 80 mm. Ghisa e vecchi elementi: stima ±30%.</p></div>`}
+function curveSVG(pts,lim){
+  if(pts.length<2)return '';
+  const W=560,H=240,L=40,B=28,T=10,R=10;
+  const xs=pts.map(p=>p[0]),ys=pts.map(p=>p[1]);
+  const x0=Math.min(...xs),x1=Math.max(...xs),y0=Math.floor(Math.min(...ys)/5)*5-5,y1=Math.ceil(Math.max(...ys,lim||0)/5)*5+5;
+  const X=v=>L+(W-L-R)*(x1-v)/(x1-x0),Y=v=>H-B-(H-B-T)*(v-y0)/(y1-y0);
+  let g='';
+  for(let y=y0;y<=y1;y+=5)g+=`<line x1="${L}" x2="${W-R}" y1="${Y(y)}" y2="${Y(y)}" stroke="currentColor" opacity=".12"/><text x="${L-6}" y="${Y(y)+4}" text-anchor="end">${y}</text>`;
+  for(let x=Math.ceil(x0/5)*5;x<=x1;x+=5)g+=`<line y1="${T}" y2="${H-B}" x1="${X(x)}" x2="${X(x)}" stroke="currentColor" opacity=".12"/><text x="${X(x)}" y="${H-B+14}" text-anchor="middle">${x}</text>`;
+  const path=pts.map((p,i)=>(i?'L':'M')+X(p[0]).toFixed(1)+' '+Y(p[1]).toFixed(1)).join(' ');
+  return `<svg viewBox="0 0 ${W} ${H}" width="100%" style="max-width:640px;color:var(--ink)">${g}${lim?`<line x1="${L}" x2="${W-R}" y1="${Y(lim)}" y2="${Y(lim)}" stroke="var(--bad)" stroke-dasharray="5 4"/><text x="${L+4}" y="${Y(lim)-4}" style="fill:var(--bad)">limite ${lim} °C</text>`:''}<path d="${path}" fill="none" stroke="var(--acc)" stroke-width="2.5"/><text x="${W-R}" y="${H-4}" text-anchor="end">temperatura esterna °C (orizzontale) → mandata °C (verticale)</text></svg>`}
+function renderOut(){
+  save();
+  const R=sysCalc(S),g=S.g;
+  document.querySelectorAll('[data-rest]').forEach(el=>{
+    for(const r of S.rooms){const a=r.rads.find(x=>x.id==el.dataset.rest);if(a){el.textContent=(Math.round(radW(a))||'—')+' W';break}}});
+  if(!R.rooms.length){document.getElementById('out').innerHTML='';return}
+  R.rooms.forEach(x=>{const el=document.querySelector(`[data-sum="${x.r.id}"]`);if(el)el.textContent=`— carico ${f0(x.c.tot)} W${x.c.have>0?`, radiatori ${f0(x.c.have)} W`:''}`});
+  const noRad=R.withRad===0,nBad=R.rooms.filter(x=>x.c.ok===false).length,nOver=R.rooms.filter(x=>x.c.over).length;
+  const wm=R.wm2,wmCls=wm>110?'warn':'ok';
+  const stanza=R.rooms.map(x=>{const c=x.c;
+    const st=c.ok===null?'<span class="note">nessun radiatore</span>':(c.ok?'<span class="ok">bastano</span>':(c.okMax?'<span class="warn">bastano solo con mandata alta</span>':`<span class="bad">non bastano nemmeno a ${f0(R.TfMax)} °C</span>`));
+    return `<tr><td>${x.r.name}</td><td>${f0(c.tot)}</td><td>${c.have>0?f0(c.have):'—'}</td><td>${c.have>0?f0(c.avail):'—'}</td><td>${st}</td><td>${c.have>0?(c.over?`<b class="bad">oltre il limite (servirebbero ${f0(c.TfNeed)} °C)</b>`:`<b class="${c.TfNeed>g.Tm+0.5?'warn':'ok'}">${f0(c.TfNeed)} °C</b>`):'—'}</td><td>${f0(c.cur)}</td><td style="text-align:left;white-space:normal">${equiv(c.cur)}</td></tr>`}).join('');
+  const diss=R.rooms.map(x=>`<tr><td>${x.r.name}</td><td>${f1(x.c.A)}</td><td>${f0(x.c.Ti)}</td><td>${f0(x.c.pWall+x.c.pWin)}</td><td>${f0(x.c.pFloor+x.c.pCeil+x.c.pOther)}</td><td>${f0(x.c.pV)}</td><td>${f0(x.c.pR)}</td><td><b>${f0(x.c.tot)}</b></td><td>${f0(x.c.wm2)}</td></tr>`).join('');
+  const scen=R.rooms.map(x=>`<tr><td>${x.r.name}</td>${x.c.scen.map(v=>`<td>${f0(v)}</td>`).join('')}</tr>`).join('');
+  const comps=[];
+  comps.push(`<li><b>Caldaia:</b> almeno <b>${f1(R.kW)} kW</b> in riscaldamento (carico ${f1(R.tot/1000)} kW + ${f0(num(g.marg))}%). Una combi da 25 kW è dimensionata per il sanitario: in riscaldamento lavorerebbe a una frazione della potenza, quindi servono buona modulazione e mandata bassa per condensare.</li>`);
+  comps.push(`<li><b>Portata:</b> ${f0(R.Qtot)} L/h (${f1(R.Qtot/1000)} m³/h) con salto ${f0(R.dTw)} K. Tubo principale: <b>${R.mainPipe.name}</b> (${f1(R.mainPipe.v)} m/s).</li>`);
+  comps.push(`<li><b>Circolatore:</b> ${f0(R.Qtot)} L/h a circa <b>${f1(R.Hm)} m c.a.</b> (stima con ${f0(num(g.Lcirc,40))} m di circuito, 150 Pa/m + 30% di perdite localizzate + 10 kPa per valvole e radiatore). Verifica sul circuito reale; va bene un elettronico a velocità variabile.</li>`);
+  comps.push(`<li><b>Vaso di espansione:</b> acqua ${f0(R.Vimp)} L, espansione ${(R.e*100).toFixed(1).replace('.',',')}% a ${f0(num(g.Tmax,80))} °C → <b>${f1(R.Vn)} L</b>${R.Vstd?` → vaso standard da <b>${R.Vstd} L</b> (sottrai quello già nella caldaia)`:' → oltre gli 80 L'}.</li>`);
+  comps.push(`<li><b>Tubi dei rami:</b> ${R.rooms.map(x=>{const p=pipeFor(x.c.Q,0.7);return `${x.r.name} ${f0(x.c.Q)} L/h → ${p.name}`}).join('; ')} (v ≤ 0,7 m/s).</li>`);
+  comps.push(`<li><b>Accessori:</b> valvola termostatica su ogni radiatore (tranne il locale con il termostato ambiente) e detentore per bilanciare, sonda esterna con curva climatica, defangatore/filtro magnetico, valvola di sfogo aria, valvola di sicurezza ${f0(num(g.Psv,3))} bar, manometro, rubinetto di carico.</li>`);
+  const crv=[15,10,5,0,-5,-10].filter(t=>t>=Math.min(num(g.Te),-10)-0.01).map(t=>{const p=R.curve.find(q=>q[0]===t);return p?`<tr><td>${t} °C</td><td>${p[1]>R.TfMax?`<b class="bad">${f0(p[1])} °C (oltre il limite)</b>`:`<b>${f0(p[1])} °C</b>`}</td></tr>`:''}).join('');
+  const verdict=noRad?'inserisci i radiatori per sapere a che mandata bastano':(nOver?`${nOver} stanz${nOver>1?'e non bastano':'a non basta'} nemmeno alla mandata massima di ${f0(R.TfMax)} °C: vedi «Soluzioni»`:(nBad?`${nBad} stanz${nBad>1?'e bastano':'a basta'} solo con mandata più alta di ${f0(num(g.Tm))}/${f0(num(g.Tr))}, ma entro il limite`:`tutte le stanze con radiatori bastano a ${f0(num(g.Tm))}/${f0(num(g.Tr))}`));
+  const sol=solHTML(R,S),repl=replHTML(R,S);
+  const calNote=R.cal?` Carico corretto con la taratura ${R.cal.fixed?'da una lettura della caldaia':'sul funzionamento reale'}: ×${(Math.round(R.k*100)/100).toString().replace('.',',')}${R.k>1.5||R.k<0.4?' (fattore insolito: ricontrolla i dati della taratura)':''}. ${R.cal.fixed?'Il fattore è fisso: se cambi misure o radiatori il carico cambia di conseguenza.':'Il carico totale resta ancorato a quel giorno: se cambi le misure di una stanza cambia soprattutto come si ripartisce tra le stanze.'}`:'';
+  const warnCurve=R.curve.some(p=>p[1]>R.TfMax)?`<p class="note bad">Sotto i ${f0((R.curve.filter(p=>p[1]>R.TfMax).sort((a,b)=>b[0]-a[0])[0]||[0])[0])} °C esterni la casa non resta in temperatura con questi radiatori, perché servirebbe una mandata oltre il limite di ${f0(R.TfMax)} °C.</p>`:'';
+  const chk=checks(S,R);
+  const chkHTML=`<div class="card"><h2>Controlli sui dati</h2>${chk.length?'<ul class="l">'+chk.map(c=>`<li class="${c.cls}">${c.txt}</li>`).join('')+'</ul>':'<p class="ok">Dati coerenti: nessun problema trovato.</p>'}</div>`;
+  document.getElementById('out').innerHTML=`
+  ${chkHTML}<div class="card"><h2>3. Risultato</h2>
+   <div class="big">
+    <div class="kpi"><b>${f1(R.tot/1000)} kW</b><span>carico termico del piano a ${f0(num(g.Te))} °C esterni</span></div>
+    <div class="kpi"><b class="${wmCls}">${f0(wm)} W/m²</b><span>su ${f1(R.area)} m² (tipico: 50-100 ben isolato, 100-150 vecchio)</span></div>
+    <div class="kpi"><b>${f1(R.kW)} kW</b><span>potenza minima caldaia in riscaldamento</span></div>
+    <div class="kpi"><b class="${noRad?'':(R.worst.c.over?'bad':(nBad?'warn':'ok'))}">${noRad?'—':(R.worst.c.over?'oltre '+f0(R.TfMax)+' °C':f0(R.worst.c.TfNeed)+' °C')}</b><span>${noRad?'mandata minima: inserisci i radiatori':(R.worst.c.over?`con i radiatori inseriti la stanza peggiore (${R.worst.r.name}) servirebbe a ${f0(R.worst.c.TfNeed)} °C: oltre il limite di ${f0(R.TfMax)} °C`:`mandata minima necessaria a freddo di progetto (stanza peggiore: ${R.worst.r.name})`)}</span></div>
+   </div><p class="note" style="margin-top:8px">Radiatori: ${verdict}.${calNote}</p></div>
+  <div class="card"><h2>Stanza per stanza: carico e radiatori</h2><div class="tw"><table><tr><th>Stanza</th><th>Carico W</th><th>Radiatori inseriti W (ΔT50)</th><th>Rendono a ${f0(num(g.Tm))}/${f0(num(g.Tr))} W</th><th>Esito</th><th>Mandata minima</th><th>Servirebbero a ${f0(num(g.Tm))}/${f0(num(g.Tr))} W (ΔT50)</th><th>Equivalgono a (indicativo)</th></tr>${stanza}</table></div>
+   <p class="note">«Rendono» è la potenza che i tuoi radiatori danno con la mandata scelta. «Mandata minima» è la temperatura di mandata con cui bastano a freddo di progetto. Le equivalenze sono indicative: confronta sempre con la scheda del radiatore scelto.</p></div>
+  ${sol}${repl}
+  <div class="card"><h2>Potenza richiesta a ΔT50 (W) per diverse mandate/ritorno</h2><div class="tw"><table><tr><th>Stanza</th>${SCEN.map(([m,r])=>`<th>${m}/${r}</th>`).join('')}</tr>${scen}</table></div>
+   <p class="note">Più bassa è la mandata, più grandi devono essere i radiatori. ΔT50 = potenza da catalogo a 75/65/20 °C (UNI EN 442).</p></div>
+  <div class="card"><h2>Curva climatica teorica della tua casa</h2>
+   <div class="row" style="align-items:flex-start;gap:20px"><div style="flex:1 1 320px">${curveSVG(R.curve,R.TfMax)}</div>
+   <div><table><tr><th>Esterna</th><th>Mandata</th></tr>${crv}</table></div></div>
+   <p class="note">Mandata necessaria per tenere ogni stanza alla sua temperatura al variare della temperatura esterna, con carico proporzionale a (Ti − Te) e salto ${f0(R.dTc)} K fisso (quello che imposti sul circolatore, par. 34). Serve per scegliere curva e offset sulla caldaia: la curva impostata deve stare sopra questa a ogni temperatura esterna, senza esagerare.</p>${warnCurve}</div>
+  <details class="card"><summary style="cursor:pointer;font-weight:600">Dettaglio dispersioni per stanza (W)</summary><div class="tw" style="margin-top:8px"><table><tr><th>Stanza</th><th>m²</th><th>Ti °C</th><th>Pareti+vetri</th><th>Pav.+soffitto+vani</th><th>Aria</th><th>Ripresa</th><th>Totale</th><th>W/m²</th></tr>${diss}<tr><td><b>Totale</b></td><td>${f1(R.area)}</td><td></td><td></td><td></td><td></td><td></td><td><b>${f0(R.tot)}</b></td><td>${f0(R.wm2)}</td></tr></table></div></details>
+  <div class="card"><h2>Componenti</h2><ul class="l">${comps.join('')}</ul></div>`;
+}
+
+/* ---------- pagina caldaia: letture e salto ΔT ---------- */
+const kTxt=k=>(Math.round(k*100)/100).toString().replace('.',',');
+function lettOut(l){
+  const d=lettura(l,caldEff(),S),g=S.g;
+  if(!d)return '<p class="note">Scrivi almeno mandata e ritorno per vedere il salto.</p>';
+  let h=`<div class="big" style="margin-top:6px"><div class="kpi"><b class="${d.cls}">${f1(d.dT)} K</b><span>salto mandata − ritorno (media dell'acqua ${f1(d.mean)} °C)</span></div>`;
+  if(d.atteso!=null)h+=`<div class="kpi"><b>${d.atteso} K</b><span>salto atteso dal par. 34 (con par. 33 = ${caldEff().par.p33})${Math.abs(d.dT-d.atteso)>5?' · lontano dal valore impostato':''}</span></div>`;
+  h+=`<div class="kpi"><b>${f1(num(g.Tm)-num(g.Tr))} K</b><span>salto usato nei calcoli (${f0(num(g.Tm))}/${f0(num(g.Tr))})</span></div></div>`;
+  h+=`<p class="${d.cls}" style="margin:6px 0">${d.stato}</p>`;
+  if(d.Q!=null)h+=`<p class="note">Stima a occhio (modulazione ${l.mod} %, supponendo che vada da 2,5 kW al massimo del par. 04 e un rendimento del ${f0(d.eta*100)} %): potenza ceduta circa <b>${f0(d.Q)} W</b>${d.flow!=null?`, portata circa <b>${f0(d.flow)} L/h</b>`:''}.</p>`;
+  if(d.modelLoad!=null)h+=`<p class="note">Con ${l.Te} °C fuori il modello dà ${f0(d.modelLoad)} W a regime per tutto il piano${d.kSug!=null?(d.kSug>=0.3&&d.kSug<=1.6?`; la caldaia ne stava dando circa il ${f0(d.kSug*100)} %. <button class="x" data-usek="${l.id}">Usa come taratura del carico (×${kTxt(d.kSug)})</button> Vale se in quel momento le stanze erano a temperatura e la caldaia a regime.`:`; la stima della potenza ceduta dà ${f0(d.kSug*100)} % del modello: non torna, quindi non la uso per tarare. Controlla la modulazione letta, il par. 04 e che fosse a regime.`):'.'}</p>`;
+  h+=`<div class="row" style="margin-top:6px"><button class="x" data-usemr="${l.id}">Usa ${f0(l.Tm)}/${f0(l.Tr)} come mandata e ritorno nei calcoli</button>${(l.Te!==''&&l.Te!=null&&isFinite(parseFloat(l.Te)))?`<button class="x" data-usecal="${l.id}">Taratura dal giorno: ${l.Te} °C fuori, mandata ${f0(l.Tm)}, ritorno ${f0(l.Tr)}</button>`:''}</div><p class="note">La taratura dal giorno usa i radiatori inseriti: vale se in quel momento le stanze erano a temperatura e i radiatori sono quelli giusti. La taratura dal carico (sopra) usa la potenza stimata dalla modulazione: sono due strade diverse, la seconda toglie la prima.</p>`;
+  return h}
+function lettSum(){
+  const dts=S.cald.letture.map(l=>lettura(l,caldEff(),S)).filter(Boolean).map(d=>d.dT);
+  return dts.length?`ΔT medio ${f1(dts.reduce((a,b)=>a+b,0)/dts.length)} K su ${dts.length} ${dts.length>1?'letture':'lettura'} (da ${f1(Math.min(...dts))} a ${f1(Math.max(...dts))} K)`:'Nessuna lettura ancora.'}
+function updateLettura(id){
+  const l=S.cald.letture.find(x=>x.id==id);if(!l)return;
+  const el=document.querySelector(`[data-lout="${id}"]`);if(el)el.innerHTML=lettOut(l);
+  const d=lettura(l,caldEff(),S),s=document.querySelector(`[data-lsum="${id}"]`);if(s)s.textContent=d?`— ΔT ${f1(d.dT)} K`:'';
+  const t=document.getElementById('lsum');if(t)t.textContent=lettSum()}
+function renderCald(){
+  const P=S.cald.par,L=S.cald.letture;
+  const pf=(label,key,ph)=>`<label>${label}<input type="number" step="any" data-cs="${key}" value="${P[key]??''}" placeholder="${ph}"></label>`;
+  const sf=(label,key)=>`<label>${label}<select data-cs="${key}">${optsS([['','—'],['SI','SI'],['NO','NO']],P[key])}</select></label>`;
+  const lf=(label,key,v)=>`<label>${label}<input type="number" step="any" data-lk="${key}" value="${v??''}"></label>`;
+  const kf=num(S.g.kFix)>0?`<p class="warn">Il calcolo sta usando la taratura da una lettura: carico ×${kTxt(num(S.g.kFix))}. <button class="x" data-nok="1">Togli</button></p>`:'';
+  const items=L.map(l=>{const d=lettura(l,caldEff(),S);
+    return `<details class="room" data-lid="${l.id}" open><summary>${l.quando||'Lettura '+l.id} <span class="note" data-lsum="${l.id}">${d?'— ΔT '+f1(d.dT)+' K':''}</span></summary>
+    <div class="grid" style="margin-top:8px">
+     <label>Quando (data e ora)<input type="text" data-lk="quando" value="${l.quando||''}"></label>
+     ${lf('Temperatura esterna (°C)','Te',l.Te)}${lf('Temperatura stanza sull\'RC21 (°C)','Ti',l.Ti)}${lf('Set mandata (°C)','setM',l.setM)}
+     ${lf('Temperatura mandata (°C)','Tm',l.Tm)}${lf('Temperatura ritorno (°C)','Tr',l.Tr)}${lf('Modulazione potenza (%)','mod',l.mod)}
+     ${lf('Pressione impianto (bar)','press',l.press)}${lf('Temperatura fumi (°C)','fumi',l.fumi)}
+     <label>Nota (pompa, valvole, stanze…)<input type="text" data-lk="nota" value="${l.nota||''}"></label>
+    </div>
+    <div data-lout="${l.id}">${lettOut(l)}</div>
+    <div class="row" style="margin-top:8px"><button class="x" data-dell="${l.id}">Elimina lettura</button></div></details>`}).join('');
+  document.getElementById('viewCald').innerHTML=`
+  <div class="card"><div class="row" style="justify-content:space-between"><h2 style="margin:0">Letture della caldaia e salto ΔT</h2><button class="pri" data-addl="1">+ Lettura</button></div>
+   <p class="note">Sul comando remoto: Menu → Informazioni → Riscaldamento. Leggi mandata, ritorno, modulazione e pressione a regime, dopo 30-60 minuti con il bruciatore acceso e i radiatori caldi: nei primi minuti il salto è sempre grande. La temperatura esterna è quella del display (se c'è la sonda) o di un termometro.</p>
+   <p><b id="lsum">${lettSum()}</b></p>${kf}
+   ${items||'<p class="note">Premi «+ Lettura» e scrivi i valori che leggi.</p>'}</div>
+  <div class="card"><h2>Impostazioni attuali (annotale prima di cambiarle)</h2>
+   <p class="note">I valori in grigio sono quelli di fabbrica. Servono per confrontare il salto letto con quello impostato.</p>
+   <h3 style="font-size:13px;color:var(--mut);margin:8px 0 4px">Caldaia, menu tecnico</h3>
+   <div class="grid">${pf('Par. 02 intervallo mandata (0 normale, 1 ridotto)','p02','0')}${pf('Par. 04 potenza max riscaldamento','p04','78')}${pf('Par. 05 modo pompa (0 intermittente, 1 sempre attiva)','p05','0')}${pf('Par. 06 attesa riaccensione (min)','p06','3')}${pf('Par. 33 modulazione circolatore (0-3)','p33','0')}${pf('Par. 34 ΔT circolatore (0=20, 1=15, 2=10, 3=5 K)','p34','0')}${pf('Par. 35 limite max circolatore','p35','88')}</div>
+   <h3 style="font-size:13px;color:var(--mut);margin:10px 0 4px">Comando remoto (Impostazioni riscaldamento → Param. regolazione)</h3>
+   <div class="grid">${sf('Uso sonda ambiente','sondaAmb')}${sf('Uso modulazione ambiente','modAmb')}${sf('Uso sonda esterna','sondaEst')}${pf('Inerzia impianto (1-20)','inerzia','10')}${pf('Set minimo mandata (°C)','setMin','20')}${pf('Set massimo mandata (°C)','setMax','90')}${pf('Curva OTC (1-9)','curva','3')}${pf('Offset curva (−15…+15)','offset','0')}${pf('Isteresi ambiente (°C)','isteresi','0.1')}</div>
+  </div>`;
+}
+/* ---------- pagina «Sul posto»: procedura guidata ---------- */
+function recRows(cfg,fit,g,rp){
+  const B=cfg==='B',cv=B&&fit&&fit.best;
+  const C='Caldaia, menu tecnico',R='RC21 · Param. regolazione';
+  const tmax=Math.round(num(g.TfMax,73));
+  return [[C,'p02','Par. 02 intervallo mandata','0',0],[C,'p04','Par. 04 potenza max riscaldamento',rp.p04+' ('+String(rp.kW).replace('.',',')+' kW)',rp.p04],[C,'p06','Par. 06 attesa riaccensione (min)','5',5],
+    [C,'p33','Par. 33 modulazione circolatore','1',1],[C,'p34','Par. 34 ΔT del circolatore',rp.p34+' ('+rp.dT+' K)',rp.p34],
+    [R,'sondaAmb','Uso sonda ambiente','SI','SI'],[R,'modAmb','Uso modulazione ambiente','SI','SI'],[R,'sondaEst','Uso sonda esterna',B?'SI':'NO',B?'SI':'NO'],
+    [R,'inerzia','Inerzia impianto',rp.inerzia+' (ghisa '+Math.round(rp.share*100)+' % dei radiatori; parti dal valore attuale)',rp.inerzia],[R,'setMin','Set minimo mandata (°C)','35',35],[R,'setMax','Set massimo mandata (°C)',String(tmax),tmax],
+    [R,'curva','Curva OTC',cv?String(fit.best.curva).replace('.',','):'— (senza sonda)',cv?fit.best.curva:null],[R,'offset','Offset curva',cv?(fit.best.off>0?'+':'')+fit.best.off:'— (senza sonda)',cv?fit.best.off:null]]}
+// valori in vigore: quelli annotati «prima», sostituiti dai consigliati dove hai spuntato «Fatto»
+function effPar(){const R=sysCalc(S),rp=recParams(S,R),fit=S.posto.cfg==='B'?otcFit(S,rp.dT,35):null;const p=Object.assign({},S.cald.par);
+  for(const r of recRows(S.posto.cfg,fit,S.g,rp)){if(S.posto.done[r[1]]&&r[4]!==null&&r[4]!==undefined)p[r[1]]=r[4]}return p}
+function caldEff(){return {par:effPar(),letture:S.cald.letture}}
+const SELKEYS=['sondaAmb','modAmb','sondaEst'];
+function postoCheck(){
+  const ck=S.posto.ck,has=v=>v!==''&&v!=null&&isFinite(parseFloat(v));
+  const rp=recParams(S,sysCalc(S));const fit=S.posto.cfg==='B'?otcFit(S,rp.dT,35):null;
+  if(!fit||!fit.best)return '<p class="note">Scrivi la temperatura esterna e il Set mandata che leggi.</p>';
+  if(!has(ck.Te)||!has(ck.setM))return '<p class="note">Scrivi la temperatura esterna e il Set mandata che leggi.</p>';
+  const cap=otcCap(fit.best.curva,fit.best.off,num(ck.Te),35,fit.TfMax),diff=num(ck.setM)-cap;
+  const cls=Math.abs(diff)<=3?'ok':'warn';
+  return `<p>Con curva ${String(fit.best.curva).replace('.',',')} e offset ${fit.best.off>0?'+':''}${fit.best.off}, a ${f0(num(ck.Te))} °C fuori il tetto della mandata è circa <b>${f0(cap)} °C</b>; leggi ${f0(num(ck.setM))} °C: scarto <b class="${cls}">${diff>0?'+':''}${f1(diff)} °C</b>.</p><p class="note">${Math.abs(diff)<=3?'Entro ±3 °C: la curva è come calcolata.':'Se la modulazione ambiente era attiva e la stanza vicina al set, il Set mandata può essere più basso del tetto: ripeti con una stanza fredda (la caldaia chiede il massimo) o con la modulazione ambiente disattivata per qualche minuto. Se lo scarto resta, correggi l\'offset di circa '+(diff>0?'−':'+')+f0(Math.abs(diff))+' °C.'}</p>`}
+function renderPosto(){
+  const P=S.cald.par,cfg=S.posto.cfg,B=cfg==='B';
+  const rp=recParams(S,sysCalc(S));
+  const fit=B?otcFit(S,rp.dT,35):null;
+  const rows=recRows(cfg,fit,S.g,rp);
+  const done=rows.filter(r=>S.posto.done[r[1]]).length;
+  const prima=r=>{const k=r[1];return SELKEYS.includes(k)?`<select data-cs="${k}">${optsS([['','—'],['SI','SI'],['NO','NO']],P[k])}</select>`:`<input type="number" step="any" data-cs="${k}" value="${P[k]??''}">`};
+  const trs=rows.map(r=>`<tr><td style="text-align:left">${r[0]}</td><td style="text-align:left"><b>${r[2]}</b></td><td>${prima(r)}</td><td style="text-align:left"><b>${r[3]}</b></td><td style="text-align:center"><input type="checkbox" data-pd="${r[1]}" ${S.posto.done[r[1]]?'checked':''} style="width:auto"></td></tr>`).join('');
+  const last=[...S.cald.letture].reverse().find(l=>lettura(l,caldEff(),S));
+  const cons=last?consigli(last,caldEff(),S).map(c=>`<li class="${c.cls}">${c.txt}</li>`).join(''):'<li class="note">Nessuna lettura ancora: inseriscila nella scheda «Caldaia e ΔT».</li>';
+  const curve=B&&fit?`<div class="card"><h2>Curva climatica con la sonda</h2>
+    <p class="note">Valori calcolati sui tuoi radiatori attuali con salto ${rp.dT} K (par. 34 = ${rp.p34}). Il tetto di mandata non supera ${f0(fit.TfMax)} °C.</p>
+    <div class="tw"><table><tr><th>Temperatura esterna</th>${fit.caps.map(c=>`<th>${c.Te>0?'+':''}${c.Te} °C</th>`).join('')}</tr>
+    <tr><td>Mandata necessaria</td>${fit.caps.map(c=>`<td>${f0(c.need)}</td>`).join('')}</tr>
+    <tr><td><b>Tetto con la curva</b></td>${fit.caps.map(c=>`<td><b>${c.cap!=null?f0(c.cap):'—'}</b></td>`).join('')}</tr></table></div>
+    <h3 style="font-size:13px;color:var(--mut);margin:10px 0 4px">Controllo sul posto</h3>
+    <div class="grid"><label>Temperatura esterna sul display (°C)<input type="number" step="any" data-pck="Te" value="${S.posto.ck.Te}"></label><label>Set mandata letto sull'RC21 (°C)<input type="number" step="any" data-pck="setM" value="${S.posto.ck.setM}"></label></div>
+    <div id="pcheck">${postoCheck()}</div></div>`:'';
+  document.getElementById('viewPosto').innerHTML=`
+  <div class="card"><div class="row" style="justify-content:space-between"><h2 style="margin:0">Procedura sul posto · City Class 25 K + RC21</h2>
+    <label style="margin:0">Configurazione <select data-pcfg="1" style="width:auto">${optsS([['A','A · senza sonda esterna'],['B','B · con sonda esterna']],cfg)}</select></label></div>
+   <ol style="margin:8px 0 0 18px;padding:0"><li>Scrivi i valori <b>attuali</b> nella colonna «Prima», prima di cambiare qualsiasi cosa.</li><li>Imposta i valori consigliati e spunta «Fatto».</li><li>Accendi, aspetta 30-60 minuti e scrivi le letture nella scheda «Caldaia e ΔT».</li><li>Segui i consigli più sotto; se cambi qualcosa, riparti dal punto 3.</li><li>Salva i dati prima di andare via.</li></ol></div>
+  <div class="card"><h2>1. Parametri · ${done} di ${rows.length} fatti</h2><div class="tw"><table><tr><th>Dove</th><th>Parametro</th><th>Prima (attuale)</th><th>Consigliato</th><th>Fatto</th></tr>${trs}</table></div>
+   <p class="note">La caldaia: il menu tecnico si apre con una combinazione di tasti riservata al tecnico (libretto p. 32), non scritta nel libretto. Il comando remoto: Impostazioni riscaldamento → Param. regolazione. Il par. 33 a 1 con il 34 a 2 forza un salto di 10 K: più acqua nei radiatori e più resa nei giorni freddi, ma meno condensazione.</p></div>
+  ${curve}
+  <div class="card"><h2>${B?'3':'2'}. Cosa fare in base all'ultima lettura</h2><ul class="l">${cons}</ul>
+   <div class="row" style="margin-top:8px"><button data-view="cald">Vai alle letture</button></div></div>
+  <div class="card"><h2>Prima di andare via</h2><div class="row"><button class="pri" data-pexp="1">Salva dati (.json)</button><button onclick="window.print()">Stampa la checklist</button></div>
+   <p class="note">I dati sono solo in questo browser: salva il file e tienine una copia. Per ricaricarli: scheda «Calcolo» → «Carica dati».</p></div>`;
+}
+function setView(v){
+  S.view=v;[['calc','viewCalc'],['cald','viewCald'],['posto','viewPosto']].forEach(([k,id])=>{const el=document.getElementById(id);if(el)el.classList.toggle('hide',v!==k)});
+  document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('pri',b.dataset.view===v));
+  if(v==='cald')renderCald();if(v==='posto')renderPosto();save()}
+
+/* ---------- eventi ---------- */
+document.addEventListener('input',e=>{
+  const t=e.target;
+  if(t.id==='comune'){if(t.value!==''){S.g.Te=parseFloat(t.value);document.querySelector('input[data-g="Te"]').value=S.g.Te;renderOut()}return}
+  if(t.dataset.pd!==undefined){S.posto.done[t.dataset.pd]=!!t.checked;save();renderPosto();return}
+  if(t.dataset.pcfg){S.posto.cfg=t.value;save();renderPosto();return}
+  if(t.dataset.pck){S.posto.ck[t.dataset.pck]=t.value===''?'':parseFloat(t.value);save();const el=document.getElementById('pcheck');if(el)el.innerHTML=postoCheck();return}
+  if(t.dataset.cs){S.cald.par[t.dataset.cs]=(t.tagName==='SELECT')?t.value:(t.value===''?'':parseFloat(t.value));save();
+    S.cald.letture.forEach(l=>updateLettura(l.id));return}
+  if(t.dataset.lk){const box=t.closest('[data-lid]');const l=box&&S.cald.letture.find(x=>x.id==box.dataset.lid);
+    if(l){l[t.dataset.lk]=(t.type==='number')?(t.value===''?'':parseFloat(t.value)):t.value;save();updateLettura(l.id);
+      if(t.dataset.lk==='quando')box.querySelector('summary').firstChild.textContent=(t.value||'Lettura '+l.id)+' '}return}
+  if(t.dataset.g){S.g[t.dataset.g]=(t.tagName==='INPUT'&&t.type==='number')?(t.value===''?'':parseFloat(t.value)):t.value;
+    if(t.dataset.g==='Te'){const c=document.getElementById('comune');const m=COMUNI.find(x=>x[1]!==''&&x[1]===S.g.Te);c.value=m?String(m[1]):''}
+    renderOut();return}
+  const det=t.closest&&t.closest('details.room');if(!det)return;
+  const r=S.rooms.find(x=>x.id==det.dataset.id);if(!r)return;
+  if(t.dataset.rk){const ra=t.closest('.rad');const a=r.rads.find(x=>x.id==ra.dataset.rid);if(!a)return;
+    const k=t.dataset.rk;a[k]=(t.tagName==='SELECT')?(['tipo','acc'].includes(k)?t.value:parseFloat(t.value)):(t.value===''?'':parseFloat(t.value));
+    if(k==='tipo'){renderRooms()}
+    renderOut();return}
+  if(t.dataset.k){const k=t.dataset.k;
+    r[k]=(t.type==='number')?(t.value===''?'':parseFloat(t.value)):(['winSize'].includes(k)?parseFloat(t.value):t.value);
+    if(k==='tipo'){const ti={Bagno:24,Corridoio:18}[t.value]??20;r.Ti=ti;const inp=det.querySelector('input[data-k="Ti"]');if(inp)inp.value=ti}
+    if(k==='name')det.querySelector('summary').firstChild.textContent=(t.value||'Stanza')+' ';
+    renderOut()}
+});
+document.addEventListener('click',e=>{
+  const b=e.target.closest('button');if(!b)return;
+  if(b.dataset.view){setView(b.dataset.view);return}
+  if(b.dataset.pexp){document.getElementById('exportJson').click();return}
+  if(b.dataset.addl){S.cald.letture.push({id:lid++,quando:new Date().toLocaleString('it-IT',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}),Te:'',Ti:'',setM:'',Tm:'',Tr:'',mod:'',press:'',fumi:'',nota:''});save();renderCald();return}
+  if(b.dataset.dell){S.cald.letture=S.cald.letture.filter(l=>l.id!=b.dataset.dell);save();renderCald();return}
+  if(b.dataset.usek){const l=S.cald.letture.find(x=>x.id==b.dataset.usek),d=l&&lettura(l,caldEff(),S);if(d&&d.kSug){S.g.kFix=Math.round(d.kSug*100)/100;save();renderOut();renderCald()}return}
+  if(b.dataset.nok){S.g.kFix='';save();renderOut();renderCald();return}
+  if(b.dataset.usemr){const l=S.cald.letture.find(x=>x.id==b.dataset.usemr);if(l&&l.Tm!==''&&l.Tr!==''){S.g.Tm=num(l.Tm);S.g.Tr=num(l.Tr);save();renderG();renderOut();renderCald()}return}
+  if(b.dataset.usecal){const l=S.cald.letture.find(x=>x.id==b.dataset.usecal);if(l&&l.Te!==''&&l.Tm!==''&&l.Tr!==''){S.g.calTe=num(l.Te);S.g.calTf=num(l.Tm);S.g.calTr=num(l.Tr);S.g.kFix='';save();renderG();renderOut();renderCald()}return}
+  const det=b.closest('details.room');const r=det?S.rooms.find(x=>x.id==det.dataset.id):null;
+  if(b.dataset.del){S.rooms=S.rooms.filter(x=>x.id!=b.dataset.del);renderRooms();renderOut()}
+  if(b.dataset.dup){const o=S.rooms.find(x=>x.id==b.dataset.dup);if(o){const c=JSON.parse(JSON.stringify(o));c.id=uid++;c.name=o.name+' (copia)';c.rads.forEach(a=>a.id=rid++);S.rooms.push(c);renderRooms();renderOut()}}
+  if(b.dataset.addrad){const o=S.rooms.find(x=>x.id==b.dataset.addrad);if(o){o.rads.push(newRad());renderRooms();renderOut()}}
+  if(b.dataset.delrad&&r){r.rads=r.rads.filter(a=>a.id!=b.dataset.delrad);renderRooms();renderOut()}
+});
+document.getElementById('addRoom').onclick=()=>{S.rooms.push(newRoom({name:'Stanza '+(S.rooms.length+1)}));renderRooms();renderOut()};
+document.getElementById('clearAll').onclick=()=>{if(confirm('Cancellare tutte le stanze?')){S.rooms=[];renderRooms();renderOut()}};
+document.getElementById('exportJson').onclick=()=>{const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(S,null,1)],{type:'application/json'}));a.download='riscaldamento-villetta.json';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)};
+document.getElementById('importBtn').onclick=()=>document.getElementById('importFile').click();
+document.getElementById('importFile').onchange=ev=>{const f=ev.target.files[0];if(!f)return;const rd=new FileReader();rd.onload=()=>{try{const o=JSON.parse(rd.result);if(o.g&&Array.isArray(o.rooms)){S=o;normalize();renderG();renderRooms();renderOut();setView(S.view)}else alert('File non valido')}catch(e){alert('File non valido')}};rd.readAsText(f)};
+renderG();renderRooms();renderOut();setView(S.view||'calc');
+</script>
+</body>
+</html>
