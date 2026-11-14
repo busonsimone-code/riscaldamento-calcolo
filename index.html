@@ -151,6 +151,14 @@ function radW(a){
   if(a.tipo==='ghisa')return ((GHI[num(a.col,3)]||{})[num(a.h,600)]||0)*num(a.n);
   if(a.tipo==='tub')return tubEl(num(a.col,6),num(a.h,600))*num(a.n);
   return 0}
+// litri d'acqua stimati in un radiatore (valori tipici di catalogo, ±25 %)
+function radL(a){
+  const h=num(a.h,600),n=num(a.n);
+  if(a.tipo==='alu')return 0.35*h/600*n;
+  if(a.tipo==='ghisa')return ({2:0.65,3:0.9,4:1.2}[num(a.col,3)]||0.9)*h/800*n;
+  if(a.tipo==='tub')return 0.16*num(a.col,6)*h/600*n;
+  if(a.tipo==='acc')return ({'11':2.6,'21':4.5,'22':5.4,'33':7.8}[a.acc]||5)*h/600*num(a.len)/1000;
+  return num(a.w)>0?num(a.w)/120:0}
 function eExp(T){const t=[10,20,30,40,50,60,70,80,90],r=[999.7,998.2,995.7,992.2,988.0,983.2,977.8,971.8,965.3];
   T=Math.min(90,Math.max(10,T));let i=0;while(i<t.length-2&&T>t[i+1])i++;
   const rho=r[i]+(r[i+1]-r[i])*(T-t[i])/(t[i+1]-t[i]);return 999.7/rho-1}
@@ -198,9 +206,10 @@ function sysCalc(S){
     let model=0,rad=0;
     const hasTr=g.calTr!==''&&g.calTr!=null&&isFinite(parseFloat(g.calTr));
     const calDtw=hasTr?Math.max(1,num(g.calTf)-num(g.calTr)):dTw; // salto di quel giorno se noto, altrimenti quello di progetto
-    for(const x of rooms){if(x.c.have>0){
-      model+=roomCalc(x.r,Object.assign({},g,{Te:num(g.calTe)})).tot;
-      rad+=x.c.have*Math.pow(Math.max(num(g.calTf)-calDtw/2-x.c.Ti,0)/50,n);}}
+    // quel giorno la casa era a regime: i radiatori coprivano la dispersione di tutto il piano (senza la maggiorazione di ripresa,
+    // che è un margine di progetto), come nella taratura da una lettura della caldaia
+    for(const x of rooms){const cc=roomCalc(x.r,Object.assign({},g,{Te:num(g.calTe)}));model+=cc.pT+cc.pV;
+      if(x.c.have>0)rad+=x.c.have*Math.pow(Math.max(num(g.calTf)-calDtw/2-x.c.Ti,0)/50,n);}
     if(model>0&&rad>0){k=rad/model;cal={k,model,rad};
       rooms.forEach(x=>{for(const p of ['pWall','pWin','pFloor','pCeil','pOther','pT','pV','pR','tot','wm2'])x.c[p]*=k});}
   }
@@ -255,14 +264,15 @@ function sysCalc(S){
   const worst=zones.reduce((a,x)=>(a==null||x.c.TfNeed>a.c.TfNeed)?x:a,null);
   const withRad=zones.filter(x=>x.c.have>0).length;
   const kW=boilerW/1000;
-  const Vimp=num(g.Vover)>0?num(g.Vover):kW*num(g.Vkw,11);
+  const Vrad=S.rooms.reduce((s,r)=>s+(r.rads||[]).reduce((t,a)=>t+radL(a),0),0);
+  const Vimp=num(g.Vover)>0?num(g.Vover):Math.max(kW*num(g.Vkw,11),Vrad+10); // la ghisa contiene molta più acqua della regola «litri per kW»
   const e=eExp(num(g.Tmax,80)),Pf=num(g.Psv,3)-0.5,Pi=num(g.Pi,1);
   const den=1-(Pi+1)/(Pf+1);
   const Vn=den>0?Vimp*e/den:NaN;
   const Vstd=VESSELS.find(v=>v>=Vn)||null;
   const mainPipe=pipeFor(Qtot,1.0);
   const Hm=((num(g.Lcirc,40)*150*1.3)+10000)/9810;
-  return {rooms,zones,tot,area,boilerW,kW,Qtot,dTw,dTc,Tmean,TfMax,curve,worst,withRad,Vimp,e,Pf,Vn,Vstd,mainPipe,Hm,n,k,cal,wm2:area>0?tot/area:0};
+  return {rooms,zones,tot,area,boilerW,kW,Qtot,dTw,dTc,Tmean,TfMax,curve,worst,withRad,Vimp,Vrad,e,Pf,Vn,Vstd,mainPipe,Hm,n,k,cal,wm2:area>0?tot/area:0};
 }
 // piano con ritorno massimo (per far condensare): sceglie il salto del circolatore (par. 34) e la mandata
 // in modo che il ritorno non superi TrMax e i radiatori bastano; le stanze troppo difficili restano fuori e si dicono
@@ -277,7 +287,8 @@ function condPlan(S,R){
     const Tf=Math.min(TrMax+dT,Math.ceil(M+dT/2-1e-9)),Tr=Tf-dT;
     // la configurazione che rende di più nei limiti (serve per dire quanto manca alle stanze rimaste fuori)
     const opt=[5,10,15,20].map(d=>{const f=Math.min(TfMax,TrMax+d);return {dT:d,Tf:f,Tr:f-d,mean:f-d/2}});
-    const bm=Math.max(...opt.map(o=>o.mean)),best=opt.find(o=>o.mean>=bm-1);
+    const cand=opt.filter(o=>o.mean>=M-1e-9); // deve bastare alle stanze incluse
+    const bm=Math.max(...cand.map(o=>o.mean)),best=cand.find(o=>o.mean>=bm-1);
     const excl=zs.slice(0,k).map(z=>({name:z.r.name,miss:Math.max(0,z.c.tot-z.c.have*Math.pow(Math.max(best.mean-z.c.Ti,0)/50,n))}));
     return {dT,p34:DT_PAR34.indexOf(dT),Tf,Tr,best,p34best:DT_PAR34.indexOf(best.dT),ok:zs.slice(k).map(z=>z.r.name),excl,TrMax,TfMax}}
   return {fail:true,TrMax,TfMax,names:zs.map(z=>z.r.name)}}
@@ -395,6 +406,7 @@ function checks(S,R){
   for(const z of R.zones){if(!z.grouped)continue;const ts=z.rooms.map(y=>y.c.Ti);
     if(Math.max(...ts)-Math.min(...ts)>2)out.push({cls:'note',txt:`${z.r.name} comunicano ma hanno temperature diverse (${ts.map(t=>r1(t)).join(' e ')} °C): con l'apertura sempre aperta tendono a uguagliarsi, quindi il calcolo a zona è un'approssimazione.`})}
   if(num(g.Tm)<=num(g.Tr))out.push({cls:'bad',txt:'Mandata di progetto uguale o sotto il ritorno.'});
+  else if(Math.abs((num(g.Tm)-num(g.Tr))-num(g.dTp,10))>2)out.push({cls:'warn',txt:`Mandata e ritorno di progetto (${num(g.Tm)}/${num(g.Tr)}, salto ${num(g.Tm)-num(g.Tr)} K) non corrispondono al salto impostato sul circolatore (${num(g.dTp,10)} K, par. 34): portata, curva e parametri consigliati usano il salto del circolatore. Rendili uguali (il pulsante «Usa … nei calcoli» nella Risposta lo fa da solo).`});
   if(num(g.Tr)>num(g.TrMax,55))out.push({cls:'warn',txt:`Il ritorno di progetto (${num(g.Tr)} °C) supera il massimo per condensare (${num(g.TrMax,55)} °C): la caldaia non condensa. Vedi «Per condensare» nella Risposta.`});
   if(num(g.Tm)>num(g.TfMax,70))out.push({cls:'warn',txt:`La mandata di progetto (${num(g.Tm)} °C) supera il limite di ${num(g.TfMax,70)} °C.`});
   if(R.k<0.4||R.k>1.5)out.push({cls:'warn',txt:`La taratura cambia il carico di ×${r1(R.k)}: valore insolito, ricontrolla i dati della taratura.`});
@@ -404,14 +416,15 @@ function checks(S,R){
 // ---- curva climatica dell'RC21 (fig. 12 del manuale): retta da (27 °C esterni, 20 °C di mandata) ----
 function otcCap(curva,off,Te,tmin,tmax){return Math.min(tmax,Math.max(tmin,20+0.322*curva*(27-Te)+off))}
 function otcFit(S,dTw,tmin){
-  const g=S.g,R=sysCalc(S),n=num(g.expo,1.3),Ted=num(g.Te),TfMax=num(g.TfMax,70);
+  const g=S.g,R=sysCalc(S),n=num(g.expo,1.3),Ted=num(g.Te);
+  const TfMax=Math.min(num(g.TfMax,70),num(g.TrMax,55)+dTw); // tetto: limite dei tubi e ritorno massimo per condensare
   if(!R.rooms.length)return null;
   const need=Te=>{let f=-Infinity;for(const x of R.zones){const Ti=x.c.Ti;if(Te>=Ti){f=Math.max(f,Ti);continue}
     const kk=(Ti-Ted)<=0?0:(Ti-Te)/(Ti-Ted);f=Math.max(f,Ti+x.c.dTmNeed*Math.pow(Math.max(kk,0),1/n)+dTw/2)}return f};
   // (dTw = salto del circolatore passato dal chiamante)
   const tg={};for(let Te=Math.round(Ted);Te<=15;Te++)tg[Te]=Math.min(need(Te)+2,TfMax);
   let best=null;
-  for(let nn=0.5;nn<=9.001;nn+=0.1)for(let off=-15;off<=10;off++){
+  for(let i=10;i<=90;i++)for(let off=-15;off<=15;off++){const nn=i/10; // RC21: curva da 1,0 a 9,0, offset da −15 a +15
     let ok=true,ex=0;
     for(const Te in tg){const L=otcCap(nn,off,+Te,tmin,TfMax);if(L<tg[Te]-0.5){ok=false;break}ex+=L-tg[Te]}
     if(ok&&(!best||ex<best.ex))best={curva:Math.round(nn*10)/10,off,ex};
@@ -424,13 +437,13 @@ function otcFit(S,dTw,tmin){
 function consigli(l,cald,S){
   const d=lettura(l,cald,S);if(!d)return [];
   const has=v=>v!==''&&v!=null&&isFinite(parseFloat(v));
-  const out=[];
-  if(d.dT>=20)out.push({cls:'warn',txt:`Salto ${r1(d.dT)} K: passa poca acqua. Metti par. 33 = 1 e par. 34 = 2 (10 K), apri bene i detentori, spurga i radiatori e controlla i fanghi nella ghisa; poi rileggi dopo 30-60 minuti.`});
+  const out=[],dTp=num(S.g.dTp,10),i34=DT_PAR34.indexOf(dTp),TrMax=num(S.g.TrMax,55);
+  if(d.dT>=20)out.push({cls:'warn',txt:`Salto ${r1(d.dT)} K: passa poca acqua. Metti par. 33 = 1 e par. 34 = ${i34>=0?i34:2} (${i34>=0?dTp:10} K), apri bene i detentori, spurga i radiatori e controlla i fanghi nella ghisa; poi rileggi dopo 30-60 minuti.`});
   else if(d.dT>=10)out.push({cls:'ok',txt:`Salto ${r1(d.dT)} K: normale, non toccare altro sulla portata.`});
   else if(d.dT>0)out.push({cls:'warn',txt:`Salto ${r1(d.dT)} K: se le stanze sono a temperatura va bene. Se sono fredde con la mandata alta i radiatori non cedono calore: spurgo aria, fanghi, circuiti in bypass oppure sono semplicemente al limite.`});
   if(d.atteso!=null&&d.dT>0&&Math.abs(d.dT-d.atteso)>5)out.push({cls:'warn',txt:`Il salto letto è lontano da quello impostato (${d.atteso} K): il circolatore non lo sta seguendo. Controlla par. 33, 34 e 35 e se c'è aria nel circolatore.`});
   if(has(l.setM)&&has(l.Tm)&&num(l.Tm)<num(l.setM)-5)out.push({cls:'warn',txt:'La mandata è più di 5 °C sotto il set: la caldaia non arriva alla temperatura chiesta (potenza limitata dal par. 04, riscaldamento ancora in corso o scambiatore sporco).'});
-  if(has(l.Tr)&&num(l.Tr)>55)out.push({cls:'note',txt:'Ritorno sopra 55 °C: in questo momento la caldaia non condensa. Normale nei giorni più freddi con questi radiatori.'});
+  if(has(l.Tr)&&num(l.Tr)>TrMax)out.push({cls:'warn',txt:`Ritorno sopra ${r1(TrMax)} °C: in questo momento la caldaia non condensa. ${TrMax+dTp<num(S.g.TfMax,70)?`Abbassa il set massimo di mandata a ${r1(TrMax+dTp)} °C (con salto ${dTp} K) o controlla`:'Il salto è più piccolo di quello impostato: controlla'} che il par. 33 sia a 1 e il par. 34 a ${i34>=0?i34:'—'} (${dTp} K)${has(l.Tm)?`; con mandata ${r1(num(l.Tm))} °C e salto ${dTp} K il ritorno sarebbe ${r1(num(l.Tm)-dTp)} °C`:''}.`});
   if(has(l.press)&&(num(l.press)<0.8||num(l.press)>2.5))out.push({cls:'warn',txt:`Pressione ${l.press} bar: il libretto indica 1-1,5 bar a freddo e sotto 0,5 bar la caldaia si ferma. Controlla il carico e il vaso.`});
   return out}
 //#CALC-END
@@ -574,7 +587,7 @@ function renderOut(){
   comps.push(`<li><b>Caldaia:</b> almeno <b>${f1(R.kW)} kW</b> in riscaldamento (carico ${f1(R.tot/1000)} kW + ${f0(num(g.marg))}%). Una combi da 25 kW è dimensionata per il sanitario: in riscaldamento lavorerebbe a una frazione della potenza, quindi servono buona modulazione e mandata bassa per condensare.</li>`);
   comps.push(`<li><b>Portata:</b> ${f0(R.Qtot)} L/h (${f1(R.Qtot/1000)} m³/h) con salto ${f0(R.dTw)} K. Tubo principale: <b>${R.mainPipe.name}</b> (${f1(R.mainPipe.v)} m/s).</li>`);
   comps.push(`<li><b>Circolatore:</b> ${f0(R.Qtot)} L/h a circa <b>${f1(R.Hm)} m c.a.</b> (stima con ${f0(num(g.Lcirc,40))} m di circuito, 150 Pa/m + 30% di perdite localizzate + 10 kPa per valvole e radiatore). Verifica sul circuito reale; va bene un elettronico a velocità variabile.</li>`);
-  comps.push(`<li><b>Vaso di espansione:</b> acqua ${f0(R.Vimp)} L, espansione ${(R.e*100).toFixed(1).replace('.',',')}% a ${f0(num(g.Tmax,80))} °C → <b>${f1(R.Vn)} L</b>${R.Vstd?` → vaso standard da <b>${R.Vstd} L</b> (sottrai quello già nella caldaia)`:' → oltre gli 80 L'}.</li>`);
+  comps.push(`<li><b>Vaso di espansione:</b> acqua ${f0(R.Vimp)} L${num(g.Vover)>0?' (scritta da te)':` (stima: radiatori circa ${f0(R.Vrad)} L più tubi e caldaia)`}, espansione ${(R.e*100).toFixed(1).replace('.',',')}% a ${f0(num(g.Tmax,80))} °C → <b>${f1(R.Vn)} L</b>${R.Vstd?` → vaso standard da <b>${R.Vstd} L</b> (sottrai quello già nella caldaia)`:' → oltre gli 80 L'}.</li>`);
   comps.push(`<li><b>Tubi dei rami:</b> ${R.rooms.map(x=>{const p=pipeFor(x.c.Q,0.7);return `${x.r.name} ${f0(x.c.Q)} L/h → ${p.name}`}).join('; ')} (v ≤ 0,7 m/s).</li>`);
   comps.push(`<li><b>Accessori:</b> valvola termostatica sui radiatori delle stanze (la temperatura la misura solo il cronotermostato in corridoio: senza valvole non puoi regolare una stanza per conto suo) e detentore per bilanciare, sonda esterna con curva climatica, defangatore/filtro magnetico, valvola di sfogo aria, valvola di sicurezza ${f0(num(g.Psv,3))} bar, manometro, rubinetto di carico.</li>`);
   const crv=[15,10,5,0,-5,-10].filter(t=>t>=Math.min(num(g.Te),-10)-0.01).map(t=>{const p=R.curve.find(q=>q[0]===t);return p?`<tr><td>${t} °C</td><td>${p[1]>R.TfMax?`<b class="bad">${f0(p[1])} °C (oltre il limite)</b>`:`<b>${f0(p[1])} °C</b>`}</td></tr>`:''}).join('');
@@ -612,7 +625,10 @@ function renderOut(){
   <div class="card"><h2>Curva climatica teorica della tua casa</h2>
    <div class="row" style="align-items:flex-start;gap:20px"><div style="flex:1 1 320px">${curveSVG(R.curve,R.TfMax)}</div>
    <div><table><tr><th>Esterna</th><th>Mandata</th></tr>${crv}</table></div></div>
-   <p class="note">Mandata necessaria per tenere ogni stanza alla sua temperatura al variare della temperatura esterna, con carico proporzionale a (Ti − Te) e salto ${f0(R.dTc)} K fisso (quello che imposti sul circolatore, par. 34). Serve per scegliere curva e offset sulla caldaia: la curva impostata deve stare sopra questa a ogni temperatura esterna, senza esagerare.</p>${warnCurve}</div>
+   <p class="note">Mandata necessaria per tenere ogni stanza alla sua temperatura al variare della temperatura esterna, con carico proporzionale a (Ti − Te) e salto ${f0(R.dTc)} K fisso (quello che imposti sul circolatore, par. 34). Serve per scegliere curva e offset sulla caldaia: la curva impostata deve stare sopra questa a ogni temperatura esterna, senza esagerare. ${(()=>{const TrM=num(g.TrMax,55),cap=TrM+R.dTc;
+     if(cap>=R.TfMax)return `Con salto ${f0(R.dTc)} K, alla mandata massima di ${f0(R.TfMax)} °C il ritorno è ${f0(R.TfMax-R.dTc)} °C: sotto i ${f0(TrM)} °C, quindi la caldaia condensa sempre.`;
+     const over=R.curve.filter(p=>p[1]>cap).sort((a,b)=>b[0]-a[0])[0];
+     return `Per condensare (ritorno al massimo ${f0(TrM)} °C) con salto ${f0(R.dTc)} K la mandata non deve superare ${f0(cap)} °C${over?`: <b class="warn">sotto i ${f0(over[0])} °C esterni servirebbe di più</b> e la caldaia smette di condensare`:''}.`})()}</p>${warnCurve}</div>
   <details class="card"><summary style="cursor:pointer;font-weight:600">Dettaglio dispersioni per stanza (W)</summary><div class="tw" style="margin-top:8px"><table><tr><th>Stanza</th><th>m²</th><th>Ti °C</th><th>Pareti+vetri</th><th>Pav.+soffitto+vani</th><th>Aria</th><th>Ripresa</th><th>Totale</th><th>W/m²</th></tr>${diss}<tr><td><b>Totale</b></td><td>${f1(R.area)}</td><td></td><td></td><td></td><td></td><td></td><td><b>${f0(R.tot)}</b></td><td>${f0(R.wm2)}</td></tr></table></div></details>
   <div class="card"><h2>Componenti</h2><ul class="l">${comps.join('')}</ul></div>`;
   document.querySelectorAll('#out details').forEach((d,i)=>{if(openD[i])d.open=true});
@@ -628,7 +644,8 @@ function lettOut(l){
   h+=`<div class="kpi"><b>${f1(num(g.Tm)-num(g.Tr))} K</b><span>salto usato nei calcoli (${f0(num(g.Tm))}/${f0(num(g.Tr))})</span></div></div>`;
   h+=`<p class="${d.cls}" style="margin:6px 0">${d.stato}</p>`;
   if(d.Q!=null)h+=`<p class="note">Stima a occhio (modulazione ${l.mod} %, supponendo che vada da 2,5 kW al massimo del par. 04 e un rendimento del ${f0(d.eta*100)} %): potenza ceduta circa <b>${f0(d.Q)} W</b>${d.flow!=null?`, portata circa <b>${f0(d.flow)} L/h</b>`:''}.</p>`;
-  if(d.modelLoad!=null)h+=`<p class="note">Con ${l.Te} °C fuori il modello dà ${f0(d.modelLoad)} W a regime per tutto il piano${d.kSug!=null?(d.kSug>=0.3&&d.kSug<=1.6?`; la caldaia ne stava dando circa il ${f0(d.kSug*100)} %. <button class="x" data-usek="${l.id}">Usa come taratura del carico (×${kTxt(d.kSug)})</button> Vale se in quel momento le stanze erano a temperatura e la caldaia a regime.`:`; la stima della potenza ceduta dà ${f0(d.kSug*100)} % del modello: non torna, quindi non la uso per tarare. Controlla la modulazione letta, il par. 04 e che fosse a regime.`):'.'}</p>`;
+  const kNow=sysCalc(S).k;
+  if(d.modelLoad!=null)h+=`<p class="note">Con ${l.Te} °C fuori il modello senza taratura dà ${f0(d.modelLoad)} W a regime per tutto il piano${Math.abs(kNow-1)>0.005?` (con la taratura attuale ×${kTxt(kNow)}: ${f0(d.modelLoad*kNow)} W)`:''}${d.kSug!=null?(d.kSug>=0.3&&d.kSug<=1.6?`; la caldaia ne stava dando circa il ${f0(d.kSug*100)} %. <button class="x" data-usek="${l.id}">Usa come taratura del carico (×${kTxt(d.kSug)})</button> Vale se in quel momento le stanze erano a temperatura e la caldaia a regime.`:`; la stima della potenza ceduta dà ${f0(d.kSug*100)} % del modello: non torna, quindi non la uso per tarare. Controlla la modulazione letta, il par. 04 e che fosse a regime.`):'.'}</p>`;
   h+=`<div class="row" style="margin-top:6px"><button class="x" data-usemr="${l.id}">Usa ${f0(l.Tm)}/${f0(l.Tr)} come mandata e ritorno nei calcoli</button>${(l.Te!==''&&l.Te!=null&&isFinite(parseFloat(l.Te)))?`<button class="x" data-usecal="${l.id}">Taratura dal giorno: ${l.Te} °C fuori, mandata ${f0(l.Tm)}, ritorno ${f0(l.Tr)}</button>`:''}</div><p class="note">La taratura dal giorno usa i radiatori inseriti: vale se in quel momento le stanze erano a temperatura e i radiatori sono quelli giusti. La taratura dal carico (sopra) usa la potenza stimata dalla modulazione: sono due strade diverse, la seconda toglie la prima.</p>`;
   return h}
 function lettSum(){
@@ -673,7 +690,7 @@ function renderCald(){
 function recRows(cfg,fit,g,rp){
   const B=cfg==='B',cv=B&&fit&&fit.best;
   const C='Caldaia, menu tecnico',R='RC21 · Param. regolazione';
-  const tmax=Math.round(num(g.TfMax,73));
+  const tmax=Math.round(Math.min(num(g.TfMax,73),num(g.TrMax,55)+rp.dT)); // oltre, il ritorno supera il massimo per condensare
   return [[C,'p02','Par. 02 intervallo mandata','0',0],[C,'p04','Par. 04 potenza max riscaldamento',rp.p04+' ('+String(rp.kW).replace('.',',')+' kW)',rp.p04],[C,'p06','Par. 06 attesa riaccensione (min)','5',5],
     [C,'p33','Par. 33 modulazione circolatore','1',1],[C,'p34','Par. 34 ΔT del circolatore',rp.p34+' ('+rp.dT+' K)',rp.p34],
     [R,'sondaAmb','Uso sonda ambiente','SI','SI'],[R,'modAmb','Uso modulazione ambiente','SI','SI'],[R,'sondaEst','Uso sonda esterna',B?'SI':'NO',B?'SI':'NO'],
@@ -717,7 +734,7 @@ function renderPosto(){
     return `<div data-sec="1"><div class="sec-h"><h3 style="font-size:14px;margin:14px 0 0">${w}</h3><span class="cnt" data-cnt="1">${n} di ${rs.length}</span></div>${rs.map(card).join('')}</div>`}).join('');
   const cons=postoConsHTML();
   const curve=B&&fit?`<div class="card"><h2>Curva climatica con la sonda</h2>
-    <p class="note">Valori calcolati sui tuoi radiatori attuali con salto ${rp.dT} K (par. 34 = ${rp.p34}). Il tetto di mandata non supera ${f0(fit.TfMax)} °C.</p>
+    <p class="note">Valori calcolati sui tuoi radiatori attuali con salto ${rp.dT} K (par. 34 = ${rp.p34}). Il tetto di mandata non supera ${f0(fit.TfMax)} °C. ${(()=>{const zz=sysCalc(S).zones.filter(z=>z.c.have>0).sort((a,b)=>b.c.TmNeed-a.c.TmNeed)[0];return zz?`La «mandata necessaria» è quella della stanza più esigente: ${zz.r.name}.`:''})()}</p>
     <div class="tw"><table class="st"><tr><th>Temperatura esterna</th>${fit.caps.map(c=>`<th>${c.Te>0?'+':''}${c.Te} °C</th>`).join('')}</tr>
     <tr><td>Mandata necessaria</td>${fit.caps.map(c=>`<td>${f0(c.need)}</td>`).join('')}</tr>
     <tr><td><b>Tetto con la curva</b></td>${fit.caps.map(c=>`<td><b>${c.cap!=null?f0(c.cap):'—'}</b></td>`).join('')}</tr></table></div>
