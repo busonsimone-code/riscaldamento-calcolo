@@ -17,6 +17,11 @@ h2{font-size:17px;margin:0 0 8px}
 .sub{color:var(--mut);margin:0 0 12px}
 .card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px;margin:12px 0}
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
+/* etichette sopra, casella in basso: le caselle della stessa riga restano allineate anche se una scritta va a capo */
+.grid>label,.grid>div{display:flex;flex-direction:column;justify-content:flex-end;min-width:0}
+.grid>label>input,.grid>label>select{margin-top:4px}
+.grid>div>label{margin-bottom:4px}
+.grid .rest{padding:7px 0}
 label{display:block;font-size:12.5px;color:var(--mut)}
 input,select,button{font:inherit;color:inherit}
 @media (max-width:700px){input,select,textarea{font-size:16px}}
@@ -68,7 +73,8 @@ details.more h2{display:none}
 #viewPosto details.how>summary{cursor:pointer;font-weight:600}
 @media (max-width:700px){
   main{padding:10px}.card{padding:12px;margin:10px 0}
-  .grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}
+  .grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px 8px}
+  .grid>.wide{grid-column:1/-1}
   #viewPosto button{min-height:44px;padding:10px 14px}
   #viewPosto select{min-height:42px}
 }
@@ -86,16 +92,16 @@ details.more h2{display:none}
 <div class="card no-print">
   <h2>1. La casa</h2>
   <div class="grid">
-    <label>Comune (temperatura minima di progetto)<select id="comune"></select></label>
+    <label>Comune<select id="comune"></select></label>
     <label>Temp. minima esterna (°C)<input type="number" step="1" data-g="Te"></label>
-    <label>Com'è costruita<select data-g="epoca" id="epoca"></select></label>
-    <label>Mandata che vuoi usare (°C)<input type="number" step="1" data-g="Tm"></label>
-    <label>Ritorno (°C)<input type="number" step="1" data-g="Tr"></label>
-    <label>Mandata massima possibile (°C): limite di caldaia e tubi<input type="number" step="1" data-g="TfMax"></label>
-    <label>Ritorno massimo (°C): oltre non condensa<input type="number" step="1" data-g="TrMax"></label>
-    <label>Salto che imposto sul circolatore (par. 34)<select data-g="dTp"><option value="20">20 K (par. 34 = 0)</option><option value="15">15 K (par. 34 = 1)</option><option value="10">10 K (par. 34 = 2)</option><option value="5">5 K (par. 34 = 3)</option></select></label>
+    <label class="wide">Com'è costruita la casa<select data-g="epoca" id="epoca"></select></label>
+    <label>Mandata di progetto (°C)<input type="number" step="1" data-g="Tm"></label>
+    <label>Ritorno di progetto (°C)<input type="number" step="1" data-g="Tr"></label>
+    <label>Mandata massima (°C)<input type="number" step="1" data-g="TfMax"></label>
+    <label>Ritorno massimo (°C)<input type="number" step="1" data-g="TrMax"></label>
+    <label class="wide">Salto sul circolatore (par. 34)<select data-g="dTp"><option value="20">20 K (par. 34 = 0)</option><option value="15">15 K (par. 34 = 1)</option><option value="10">10 K (par. 34 = 2)</option><option value="5">5 K (par. 34 = 3)</option></select></label>
   </div>
-  <p class="note">I valori delle temperature minime per comune sono indicativi: verificali. La scelta "com'è costruita" imposta da sola muri, finestre, solai e ricambi d'aria.</p>
+  <p class="note">Mandata massima: il limite di caldaia e tubi. Ritorno massimo: oltre questo la caldaia non condensa. Le temperature minime per comune sono indicative: verificale. «Com'è costruita la casa» imposta da sola muri, finestre, solai e ricambi d'aria.</p>
   <details class="adv"><summary>Impostazioni avanzate (di solito non servono)</summary><div class="grid" id="gForm" style="margin-top:8px"></div></details>
 </div>
 
@@ -483,7 +489,7 @@ normalize();
 const save=()=>{try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}};
 
 /* ---------- editor ---------- */
-const G_FIELDS=[['H','Altezza interna (m)',0.05],['TuBelow','Temp. piano sotto non riscaldato (°C)',1],['TuAbove','Temp. piano sopra non riscaldato (°C)',1],['TuSide','Temp. vani laterali non riscaldati (°C)',1],['tb','Ponti termici (%)',1],['rip','Maggiorazione ripresa (%)',1],['marg','Margine distribuzione/caldaia (%)',1],['expo','Esponente radiatori n',0.05],['Tmax','Temp. max acqua (°C)',1],['Pi','Precarica vaso (bar)',0.1],['Psv','Taratura valvola sicurezza (bar)',0.5],['Vkw','Acqua impianto (L per kW)',1],['Vover','Volume impianto, se noto (L)',1],['Lcirc','Lunghezza circuito più lungo A+R (m)',1],['calTe','Taratura (facoltativa): temperatura esterna di un giorno reale (°C)',1],['calTf','Taratura: mandata che in quel giorno bastava (°C)',1],['calTr','Taratura: ritorno di quel giorno, se lo sai (°C)',1]];
+const G_FIELDS=[['H','Altezza interna (m)',0.05],['TuBelow','Temp. piano sotto non riscaldato (°C)',1],['TuAbove','Temp. piano sopra non riscaldato (°C)',1],['TuSide','Temp. vani laterali non riscaldati (°C)',1],['tb','Ponti termici (%)',1],['rip','Maggiorazione ripresa (%)',1],['marg','Margine distribuzione/caldaia (%)',1],['expo','Esponente radiatori n',0.05],['Tmax','Temp. max acqua (°C)',1],['Pi','Precarica vaso (bar)',0.1],['Psv','Taratura valvola sicurezza (bar)',0.5],['Vkw','Acqua impianto (L per kW)',1],['Vover','Volume impianto, se noto (L)',1],['Lcirc','Lunghezza circuito più lungo A+R (m)',1],['calTe','Taratura: esterna di un giorno reale (°C)',1],['calTf','Taratura: mandata che bastava (°C)',1],['calTr','Taratura: ritorno di quel giorno (°C)',1]];
 const optsS=(list,val)=>list.map(([v,t])=>`<option value="${v}"${String(v)===String(val)?' selected':''}>${t}</option>`).join('');
 const fld=(label,key,val,step,attr='data-k')=>`<label>${label}<input type="number" step="${step||'any'}" ${attr}="${key}" value="${val??''}"></label>`;
 function renderG(){
@@ -500,39 +506,41 @@ function radHTML(a){
   else if(a.tipo==='acc')f=`<label>Tipo piastra<select data-rk="acc">${optsS([['11','11 (1 piastra)'],['21','21'],['22','22 (2 piastre)'],['33','33 (3 piastre)']],a.acc)}</select></label>`+`<label>Altezza (mm)<select data-rk="h">${optsS([[300,'300'],[400,'400'],[500,'500'],[600,'600'],[700,'700'],[900,'900']],a.h)}</select></label>`+fld('Lunghezza (mm)','len',a.len,50,'data-rk');
   else if(a.tipo==='tub')f=fld('Elementi','n',a.n,1,'data-rk')+`<label>Colonne<select data-rk="col">${optsS([[2,'2'],[3,'3'],[4,'4'],[5,'5'],[6,'6']],a.col)}</select></label>`+`<label>Altezza (mm)<select data-rk="h">${optsS([[500,'500'],[600,'600'],[750,'750'],[900,'900'],[1000,'1000'],[1200,'1200'],[1500,'1500'],[1800,'1800']],a.h)}</select></label>`;
   else if(a.tipo==='ghisa'){const M=NEO[a.mod];
-    f=fld('Elementi','n',a.n,1,'data-rk')+`<label>Modello<select data-rk="mod">${optsS([['','generico (stima ±30 %)'],...Object.entries(NEO).map(([k,v])=>[k,`${v.nome} (interasse ${v.int})`])],a.mod||'')}</select></label>`+
-     (M?`<div><label>Dati di catalogo</label><div class="note">${M.col} colonne, profondità ${M.prof} mm, ${String(M.w).replace('.',',')} W per elemento a ΔT50</div></div>`
+    f=fld('Elementi','n',a.n,1,'data-rk')+`<label class="wide">Modello<select data-rk="mod">${optsS([['','generico (stima ±30 %)'],...Object.entries(NEO).map(([k,v])=>[k,`${v.nome} (interasse ${v.int})`])],a.mod||'')}</select></label>`+
+     (M?`<div class="wide"><p class="note" style="margin:0">Catalogo: ${M.col} colonne, profondità ${M.prof} mm, ${String(M.w).replace('.',',')} W per elemento a ΔT50.</p></div>`
        :`<label>Colonne<select data-rk="col">${optsS([[2,'2'],[3,'3'],[4,'4']],a.col)}</select></label>`+`<label>Altezza (interasse mm)<select data-rk="h">${optsS([[500,'500'],[600,'600'],[700,'700'],[800,'800']],a.h)}</select></label>`)}
   return `<div class="rad" data-rid="${a.id}"><div class="grid">
    <label>Radiatore<select data-rk="tipo">${optsS([['alu','Alluminio'],['tub','Acciaio tubolare'],['acc','Acciaio a piastra'],['ghisa','Ghisa'],['altro','Altro / scaldasalviette']],a.tipo)}</select></label>
-   ${f}${fld('Potenza nota a ΔT50 (W, facoltativa)','w',a.w,10,'data-rk')}
-   <div><label>Stima</label><div class="rest" data-rest="${a.id}">${Math.round(radW(a))||'—'} W</div></div>
-   <div style="align-self:end"><button class="x" data-delrad="${a.id}">Togli</button></div></div></div>`}
+   ${f}${fld('Potenza di catalogo (W), se la sai','w',a.w,10,'data-rk')}
+   <div><label>Potenza usata (ΔT50)</label><div class="rest" data-rest="${a.id}">${Math.round(radW(a))||'—'} W</div></div></div>
+   <div class="row" style="justify-content:flex-end;margin-top:6px"><button class="x" data-delrad="${a.id}">Togli radiatore</button></div></div>`}
 function roomHTML(r){
   const tipi=['Soggiorno','Cucina','Camera','Bagno','Corridoio','Altro'];
   return `<details class="room" data-id="${r.id}" open><summary>${r.name||'Stanza'} <span class="note" data-sum="${r.id}"></span></summary>
   <div class="grid" style="margin-top:8px">
    <label>Nome<input type="text" data-k="name" value="${r.name}"></label>
    <label>Tipo<select data-k="tipo">${tipi.map(t=>`<option${t===r.tipo?' selected':''}>${t}</option>`).join('')}</select></label>
-   ${fld('Temp. interna (°C)','Ti',r.Ti,1)}${fld('Lunghezza (m)','L',r.L,0.05)}${fld('Larghezza (m)','W',r.W,0.05)}
-   <label>Pareti verso l'esterno<select data-k="ext">${optsS([['0','nessuna'],['1L','una (lato lungo)'],['1S','una (lato corto)'],['2','due (angolo)'],['3','tre']],r.ext)}</select></label>
-   <label>Comunica con (apertura sempre aperta)<select data-k="comm">${optsS([['','nessuna'],...S.rooms.filter(o=>o.id!==r.id).map(o=>[o.id,o.name||'Stanza'])],r.comm)}</select></label>
+   ${fld('Temp. interna (°C)','Ti',r.Ti,1)}
+   <label>Pareti esterne<select data-k="ext">${optsS([['0','nessuna'],['1L','una (lato lungo)'],['1S','una (lato corto)'],['2','due (angolo)'],['3','tre']],r.ext)}</select></label>
+   ${fld('Lunghezza (m)','L',r.L,0.05)}${fld('Larghezza (m)','W',r.W,0.05)}
    ${fld('N. finestre','nWin',r.nWin,1)}
    <label>Dimensione finestre<select data-k="winSize">${optsS([[0.6,'piccola 0,6 m²'],[1.2,'media 1,2 m²'],[1.7,'normale 1,7 m²'],[2.5,'grande 2,5 m²'],[3.0,'molto grande 3 m²']],r.winSize)}</select></label>
    ${fld('N. portefinestre','nPF',r.nPF,1)}
    <label>Dimensione portefinestre<select data-k="pfSize">${optsS([[1.8,'una anta 1,8 m²'],[2.6,'due ante 2,6 m²'],[3.3,'tre ante 3,3 m²'],[4.0,'scorrevole 4 m²']],r.pfSize)}</select></label>
+   <label class="wide">Comunica con (porta o arco sempre aperti)<select data-k="comm">${optsS([['','nessuna stanza'],...S.rooms.filter(o=>o.id!==r.id).map(o=>[o.id,o.name||'Stanza'])],r.comm)}</select></label>
   </div>
   <p class="note" style="margin:4px 0 0">Portafinestra: una anta ≈ 80×220 cm, due ante ≈ 120×220, tre ante ≈ 150×220, scorrevole ≈ 180×220. Per misure diverse usa «Dettagli → Area portefinestre».</p>
   <h3 style="font-size:13px;color:var(--mut);margin:12px 0 0">Radiatori in questa stanza</h3>
   ${r.rads.map(radHTML).join('')}
   <div class="row" style="margin-top:8px"><button class="x" data-addrad="${r.id}">+ Radiatore</button><button class="x" data-dup="${r.id}">Duplica stanza</button><button class="x" data-del="${r.id}">Elimina stanza</button></div>
   <details class="adv"><summary>Dettagli (se li conosci)</summary><div class="grid" style="margin-top:8px">
-   ${fld('Altezza (m, vuoto = generale)','H',r.H,0.05)}${fld('Area finestre totale (m²)','winArea',r.winArea,0.1)}${fld('Area portefinestre totale (m²)','pfArea',r.pfArea,0.1)}
-   <label>Pavimento verso<select data-k="floorTo">${optsS([['unh','piano sotto non riscaldato'],['ground','terreno'],['heated','locale riscaldato']],r.floorTo)}</select></label>
-   <label>Soffitto verso<select data-k="ceilTo">${optsS([['unh','piano sopra non riscaldato'],['out','tetto / esterno'],['heated','locale riscaldato']],r.ceilTo)}</select></label>
-   ${fld('U parete (vuoto = automatico)','wallU',r.wallU,0.05)}${fld('U finestre','winU',r.winU,0.05)}${fld('U portefinestre (vuoto = come le finestre)','pfU',r.pfU,0.05)}${fld('U pavimento','floorU',r.floorU,0.05)}${fld('U soffitto','ceilU',r.ceilU,0.05)}
-   ${fld('Pareti verso vani non riscaldati (m²)','otherArea',r.otherArea,0.1)}${fld('Ricambi aria (1/h)','ach',r.ach,0.1)}
-  </div></details></details>`}
+   ${fld('Altezza (m)','H',r.H,0.05)}${fld('Ricambi aria (1/h)','ach',r.ach,0.1)}
+   ${fld('Area finestre (m²)','winArea',r.winArea,0.1)}${fld('U finestre','winU',r.winU,0.05)}
+   ${fld('Area portefinestre (m²)','pfArea',r.pfArea,0.1)}${fld('U portefinestre','pfU',r.pfU,0.05)}
+   <label>Pavimento verso<select data-k="floorTo">${optsS([['unh','piano sotto freddo'],['ground','terreno'],['heated','locale riscaldato']],r.floorTo)}</select></label>${fld('U pavimento','floorU',r.floorU,0.05)}
+   <label>Soffitto verso<select data-k="ceilTo">${optsS([['unh','piano sopra freddo'],['out','tetto / esterno'],['heated','locale riscaldato']],r.ceilTo)}</select></label>${fld('U soffitto','ceilU',r.ceilU,0.05)}
+   ${fld('U parete esterna','wallU',r.wallU,0.05)}${fld('Pareti verso vani freddi (m²)','otherArea',r.otherArea,0.1)}
+  </div><p class="note" style="margin:6px 0 0">Lascia vuoto quello che non sai: vale il valore automatico (altezza generale, U dall'epoca della casa, U portefinestre come le finestre).</p></details></details>`}
 // stanze comunicanti: il legame vale nei due sensi (se l'altra stanza non ne ha già uno)
 function setComm(r,v){
   const old=S.rooms.find(x=>x.id==r.comm);if(old&&old.comm==r.id)old.comm='';
