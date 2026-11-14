@@ -138,6 +138,13 @@ const ALU={350:85,500:115,600:135,700:155,800:175};            // W per elemento
 const ACC_M={'11':940,'21':1290,'22':1666,'33':2335};            // W per metro, altezza 600, ΔT50 (22: Kermi FK0 e Mexen C22 1653 W/m; 33: Mexen C33 2335 W/m; 11 e 21 stimati)
 const ACC_H={300:0.52,400:0.70,500:0.86,600:1.0,700:1.15,900:1.42};
 const GHI={2:{500:60,600:70,700:80,800:90},3:{500:70,600:85,700:100,800:115},4:{500:90,600:110,700:125,800:140}}; // grossolano
+// Ghisa Ideal Clima NeoClassic (ex Ideal Standard), dati di catalogo idealclima.eu: W per elemento a ΔT50 (EN 442), esponente, litri per elemento.
+// Il primo numero del nome è il numero di colonne (profondità 141 mm = 4 colonne, 217 mm = 6), il secondo l'altezza totale.
+const NEO={neo4_571:{nome:'NeoClassic 4/571',col:4,int:500,prof:141,w:79.5,n:1.294,L:0.68},
+ neo4_665:{nome:'NeoClassic 4/665',col:4,int:595,prof:141,w:91.1,n:1.309,L:0.74},
+ neo4_871:{nome:'NeoClassic 4/871',col:4,int:801,prof:141,w:115.5,n:1.345,L:0.86},
+ neo6_665:{nome:'NeoClassic 6/665',col:6,int:595,prof:217,w:136.0,n:1.299,L:1.07},
+ neo6_871:{nome:'NeoClassic 6/871',col:6,int:800,prof:217,w:170.0,n:1.319,L:1.24}};
 const TUB_COL={2:0.46,3:0.64,4:0.80,5:0.91,6:1.0};            // acciaio tubolare: fattore per numero di colonne (stima)
 const TUB_H={500:0.85,600:1.0,750:1.25,900:1.45,1000:1.58,1200:1.85,1500:2.25,1800:2.65}; // fattore per altezza (stima)
 const TUB_BASE=97, TUB_W=46, TUB_END=26; // W per elemento a 6 colonne h600 a ΔT50 (scheda Irsap Tesi 6, da confermare); larghezza elemento 46 mm + 26 mm di testate (catalogo De'Longhi Multicolonna)
@@ -148,14 +155,14 @@ function radW(a){
   if(num(a.w)>0)return num(a.w);
   if(a.tipo==='alu')return (ALU[num(a.h,600)]||0)*num(a.n);
   if(a.tipo==='acc')return (ACC_M[a.acc]||0)*(ACC_H[num(a.h,600)]||1)*num(a.len)/1000;
-  if(a.tipo==='ghisa')return ((GHI[num(a.col,3)]||{})[num(a.h,600)]||0)*num(a.n);
+  if(a.tipo==='ghisa')return NEO[a.mod]?NEO[a.mod].w*num(a.n):((GHI[num(a.col,3)]||{})[num(a.h,600)]||0)*num(a.n);
   if(a.tipo==='tub')return tubEl(num(a.col,6),num(a.h,600))*num(a.n);
   return 0}
 // litri d'acqua stimati in un radiatore (valori tipici di catalogo, ±25 %)
 function radL(a){
   const h=num(a.h,600),n=num(a.n);
   if(a.tipo==='alu')return 0.35*h/600*n;
-  if(a.tipo==='ghisa')return ({2:0.65,3:0.9,4:1.2}[num(a.col,3)]||0.9)*h/800*n;
+  if(a.tipo==='ghisa')return NEO[a.mod]?NEO[a.mod].L*n:({2:0.5,3:0.7,4:0.9}[num(a.col,3)]||0.7)*h/800*n; // NeoClassic 4/871: 0,86 L
   if(a.tipo==='tub')return 0.16*num(a.col,6)*h/600*n;
   if(a.tipo==='acc')return ({'11':2.6,'21':4.5,'22':5.4,'33':7.8}[a.acc]||5)*h/600*num(a.len)/1000;
   return num(a.w)>0?num(a.w)/120:0}
@@ -288,7 +295,8 @@ function condPlan(S,R){
     // la configurazione che rende di più nei limiti (serve per dire quanto manca alle stanze rimaste fuori)
     const opt=[5,10,15,20].map(d=>{const f=Math.min(TfMax,TrMax+d);return {dT:d,Tf:f,Tr:f-d,mean:f-d/2}});
     const cand=opt.filter(o=>o.mean>=M-1e-9); // deve bastare alle stanze incluse
-    const bm=Math.max(...cand.map(o=>o.mean)),best=cand.find(o=>o.mean>=bm-1);
+    // se qualche stanza resta fuori uso la configurazione che rende di più (le manca meno); altrimenti il salto più piccolo entro 1 K dal massimo
+    const bm=Math.max(...cand.map(o=>o.mean)),best=cand.find(o=>o.mean>=bm-(k>0?1e-9:1));
     const excl=zs.slice(0,k).map(z=>({name:z.r.name,miss:Math.max(0,z.c.tot-z.c.have*Math.pow(Math.max(best.mean-z.c.Ti,0)/50,n))}));
     return {dT,p34:DT_PAR34.indexOf(dT),Tf,Tr,best,p34best:DT_PAR34.indexOf(best.dT),ok:zs.slice(k).map(z=>z.r.name),excl,TrMax,TfMax}}
   return {fail:true,TrMax,TfMax,names:zs.map(z=>z.r.name)}}
@@ -340,7 +348,7 @@ function replCalc(x,scIdx){
   let add='—';
   if(have>0&&miss<=1)add='nessuna aggiunta';
   else if(first&&['alu','ghisa','tub'].includes(first.tipo)){
-    const per0=first.tipo==='alu'?ALU[num(first.h,600)]:first.tipo==='ghisa'?(GHI[num(first.col,3)]||{})[num(first.h,600)]:tubEl(num(first.col,6),num(first.h,600));
+    const per0=first.tipo==='alu'?ALU[num(first.h,600)]:first.tipo==='ghisa'?(NEO[first.mod]?NEO[first.mod].w:(GHI[num(first.col,3)]||{})[num(first.h,600)]):tubEl(num(first.col,6),num(first.h,600));
     const per=(num(first.w)>0&&num(first.n)>0)?num(first.w)/num(first.n):per0; // se conosci la potenza del radiatore, uso quella per elemento
     if(per)add=`+${Math.ceil(miss/per)} el. sul primo`;
   }else if(first&&first.tipo==='acc'){
@@ -402,7 +410,8 @@ function checks(S,R){
     const zn=R.zones.find(z=>(z.rooms||[z]).includes(x));
     if(c.have<=0&&!(zn&&zn.grouped&&zn.c.have>0))out.push({cls:'warn',txt:`${nm}: nessun radiatore inserito, non posso dire se bastano.`});
     for(const a of (r.rads||[])){if(a.tipo==='altro'&&!(num(a.w)>0))out.push({cls:'warn',txt:`${nm}: un radiatore «altro» senza potenza non conta.`});
-      if(a.tipo==='ghisa'&&!(num(a.w)>0))out.push({cls:'note',txt:`${nm}: ghisa con potenza stimata (±30 %): se la conosci scrivila.`})}}
+      if(a.tipo==='ghisa'&&!(num(a.w)>0)&&!NEO[a.mod])out.push({cls:'note',txt:`${nm}: ghisa con potenza stimata (±30 %): se è un NeoClassic sceglilo nel «Modello», altrimenti scrivi la potenza se la conosci.`});
+      if(a.tipo==='ghisa'&&num(a.w)>0&&NEO[a.mod])out.push({cls:'note',txt:`${nm}: hai scritto ${num(a.w)} W ma anche il modello ${NEO[a.mod].nome} (${r1(NEO[a.mod].w*num(a.n))} W per ${num(a.n)} elementi): vale la potenza scritta. Se era una stima, cancellala.`})}}
   for(const z of R.zones){if(!z.grouped)continue;const ts=z.rooms.map(y=>y.c.Ti);
     if(Math.max(...ts)-Math.min(...ts)>2)out.push({cls:'note',txt:`${z.r.name} comunicano ma hanno temperature diverse (${ts.map(t=>r1(t)).join(' e ')} °C): con l'apertura sempre aperta tendono a uguagliarsi, quindi il calcolo a zona è un'approssimazione.`})}
   if(num(g.Tm)<=num(g.Tr))out.push({cls:'bad',txt:'Mandata di progetto uguale o sotto il ritorno.'});
@@ -490,7 +499,10 @@ function radHTML(a){
   if(a.tipo==='alu')f=fld('Elementi','n',a.n,1,'data-rk')+`<label>Altezza (interasse mm)<select data-rk="h">${optsS([[350,'350'],[500,'500'],[600,'600'],[700,'700'],[800,'800']],a.h)}</select></label>`;
   else if(a.tipo==='acc')f=`<label>Tipo piastra<select data-rk="acc">${optsS([['11','11 (1 piastra)'],['21','21'],['22','22 (2 piastre)'],['33','33 (3 piastre)']],a.acc)}</select></label>`+`<label>Altezza (mm)<select data-rk="h">${optsS([[300,'300'],[400,'400'],[500,'500'],[600,'600'],[700,'700'],[900,'900']],a.h)}</select></label>`+fld('Lunghezza (mm)','len',a.len,50,'data-rk');
   else if(a.tipo==='tub')f=fld('Elementi','n',a.n,1,'data-rk')+`<label>Colonne<select data-rk="col">${optsS([[2,'2'],[3,'3'],[4,'4'],[5,'5'],[6,'6']],a.col)}</select></label>`+`<label>Altezza (mm)<select data-rk="h">${optsS([[500,'500'],[600,'600'],[750,'750'],[900,'900'],[1000,'1000'],[1200,'1200'],[1500,'1500'],[1800,'1800']],a.h)}</select></label>`;
-  else if(a.tipo==='ghisa')f=fld('Elementi','n',a.n,1,'data-rk')+`<label>Colonne<select data-rk="col">${optsS([[2,'2'],[3,'3'],[4,'4']],a.col)}</select></label>`+`<label>Altezza (mm)<select data-rk="h">${optsS([[500,'500'],[600,'600'],[700,'700'],[800,'800']],a.h)}</select></label>`;
+  else if(a.tipo==='ghisa'){const M=NEO[a.mod];
+    f=fld('Elementi','n',a.n,1,'data-rk')+`<label>Modello<select data-rk="mod">${optsS([['','generico (stima ±30 %)'],...Object.entries(NEO).map(([k,v])=>[k,`${v.nome} (interasse ${v.int})`])],a.mod||'')}</select></label>`+
+     (M?`<div><label>Dati di catalogo</label><div class="note">${M.col} colonne, profondità ${M.prof} mm, ${String(M.w).replace('.',',')} W per elemento a ΔT50</div></div>`
+       :`<label>Colonne<select data-rk="col">${optsS([[2,'2'],[3,'3'],[4,'4']],a.col)}</select></label>`+`<label>Altezza (interasse mm)<select data-rk="h">${optsS([[500,'500'],[600,'600'],[700,'700'],[800,'800']],a.h)}</select></label>`)}
   return `<div class="rad" data-rid="${a.id}"><div class="grid">
    <label>Radiatore<select data-rk="tipo">${optsS([['alu','Alluminio'],['tub','Acciaio tubolare'],['acc','Acciaio a piastra'],['ghisa','Ghisa'],['altro','Altro / scaldasalviette']],a.tipo)}</select></label>
    ${f}${fld('Potenza nota a ΔT50 (W, facoltativa)','w',a.w,10,'data-rk')}
@@ -601,7 +613,7 @@ function renderOut(){
   const cp=noRad?null:condPlan(S,R);let cpHTML='';
   if(cp&&cp.fail)cpHTML=`<p class="warn" style="margin:10px 0 0"><b>Per condensare (ritorno al massimo ${f0(cp.TrMax)} °C):</b> con la mandata limitata a ${f0(cp.TfMax)} °C nessuna stanza resta in temperatura al freddo di progetto.</p>`;
   else if(cp){const b=cp.best,already=num(g.dTp)===b.dT&&num(g.Tm)===b.Tf&&num(g.Tr)===b.Tr;
-    cpHTML=`<div style="margin-top:10px;padding:10px 12px;background:var(--soft);border-radius:8px"><b>Per condensare (ritorno al massimo ${f0(cp.TrMax)} °C):</b> salto ${b.dT} K (par. 34 = ${cp.p34best}), mandata fino a ${b.Tf} °C e ritorno ${b.Tr} °C; alla mandata minima serve ${cp.Tf} °C (ritorno ${cp.Tr} °C).
+    cpHTML=`<div style="margin-top:10px;padding:10px 12px;background:var(--soft);border-radius:8px"><b>Per condensare (ritorno al massimo ${f0(cp.TrMax)} °C):</b> salto ${b.dT} K (par. 34 = ${cp.p34best}), mandata fino a ${b.Tf} °C e ritorno ${b.Tr} °C; ${cp.excl.length?'':`la mandata più bassa che basta è ${cp.Tf} °C (salto ${cp.dT} K, ritorno ${cp.Tr} °C).`}
      <br>${cp.excl.length?`<span class="warn">Restano corte anche così: ${cp.excl.map(e=>`${e.name}${e.miss>=1?` (mancano circa ${f0(e.miss)} W)`:' (quasi, per meno di 1 W)'}`).join(', ')}.</span>`:'<span class="ok">Bastano tutte le stanze con radiatori.</span>'}
      <div class="row no-print" style="margin-top:6px">${already?'<span class="note">Già impostato nei calcoli.</span>':`<button data-usecp="1">Usa ${b.Tf}/${b.Tr} nei calcoli</button>`}</div></div>`}
   document.getElementById('ans').innerHTML=`<div class="card"><h2>Risposta</h2>
@@ -776,8 +788,8 @@ document.addEventListener('input',e=>{
   const det=t.closest&&t.closest('details.room');if(!det)return;
   const r=S.rooms.find(x=>x.id==det.dataset.id);if(!r)return;
   if(t.dataset.rk){const ra=t.closest('.rad');const a=r.rads.find(x=>x.id==ra.dataset.rid);if(!a)return;
-    const k=t.dataset.rk;a[k]=(t.tagName==='SELECT')?(['tipo','acc'].includes(k)?t.value:parseFloat(t.value)):(t.value===''?'':parseFloat(t.value));
-    if(k==='tipo'){renderRooms()}
+    const k=t.dataset.rk;a[k]=(t.tagName==='SELECT')?(['tipo','acc','mod'].includes(k)?t.value:parseFloat(t.value)):(t.value===''?'':parseFloat(t.value));
+    if(k==='tipo'||k==='mod'){renderRooms()}
     renderOut();return}
   if(t.dataset.k){const k=t.dataset.k;
     if(k==='comm'){setComm(r,t.value);renderRooms();renderOut();return}
