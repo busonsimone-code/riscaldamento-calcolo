@@ -413,6 +413,7 @@ function checks(S,R){
     if(wallLen(r)*c.H<c.win-0.01&&c.win>0)out.push({cls:'warn',txt:`${nm}: le finestre (${r1(c.win)} m²) sono più grandi delle pareti esterne (${r1(wallLen(r)*c.H)} m²).`});
     if(c.Ti<15||c.Ti>26)out.push({cls:'warn',txt:`${nm}: temperatura interna ${c.Ti} °C insolita.`});
     if(c.H<2.2||c.H>4)out.push({cls:'warn',txt:`${nm}: altezza ${r1(c.H)} m insolita.`});
+    if(!(num(r.H)>0))out.push({cls:'note',txt:`${nm}: altezza non scritta, uso ${r1(c.H)} m. Misurala: conta per le pareti esterne e per l'aria da scaldare.`});
     const zn=R.zones.find(z=>(z.rooms||[z]).includes(x));
     if(c.have<=0&&!(zn&&zn.grouped&&zn.c.have>0))out.push({cls:'warn',txt:`${nm}: nessun radiatore inserito, non posso dire se bastano.`});
     for(const a of (r.rads||[])){if(a.tipo==='altro'&&!(num(a.w)>0))out.push({cls:'warn',txt:`${nm}: un radiatore «altro» senza potenza non conta.`});
@@ -489,7 +490,7 @@ normalize();
 const save=()=>{try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}};
 
 /* ---------- editor ---------- */
-const G_FIELDS=[['H','Altezza interna (m)',0.05],['TuBelow','Temp. piano sotto non riscaldato (°C)',1],['TuAbove','Temp. piano sopra non riscaldato (°C)',1],['TuSide','Temp. vani laterali non riscaldati (°C)',1],['tb','Ponti termici (%)',1],['rip','Maggiorazione ripresa (%)',1],['marg','Margine distribuzione/caldaia (%)',1],['expo','Esponente radiatori n',0.05],['Tmax','Temp. max acqua (°C)',1],['Pi','Precarica vaso (bar)',0.1],['Psv','Taratura valvola sicurezza (bar)',0.5],['Vkw','Acqua impianto (L per kW)',1],['Vover','Volume impianto, se noto (L)',1],['Lcirc','Lunghezza circuito più lungo A+R (m)',1],['calTe','Taratura: esterna di un giorno reale (°C)',1],['calTf','Taratura: mandata che bastava (°C)',1],['calTr','Taratura: ritorno di quel giorno (°C)',1]];
+const G_FIELDS=[['H','Altezza delle stanze senza altezza scritta (m)',0.05],['TuBelow','Temp. piano sotto non riscaldato (°C)',1],['TuAbove','Temp. piano sopra non riscaldato (°C)',1],['TuSide','Temp. vani laterali non riscaldati (°C)',1],['tb','Ponti termici (%)',1],['rip','Maggiorazione ripresa (%)',1],['marg','Margine distribuzione/caldaia (%)',1],['expo','Esponente radiatori n',0.05],['Tmax','Temp. max acqua (°C)',1],['Pi','Precarica vaso (bar)',0.1],['Psv','Taratura valvola sicurezza (bar)',0.5],['Vkw','Acqua impianto (L per kW)',1],['Vover','Volume impianto, se noto (L)',1],['Lcirc','Lunghezza circuito più lungo A+R (m)',1],['calTe','Taratura: esterna di un giorno reale (°C)',1],['calTf','Taratura: mandata che bastava (°C)',1],['calTr','Taratura: ritorno di quel giorno (°C)',1]];
 const optsS=(list,val)=>list.map(([v,t])=>`<option value="${v}"${String(v)===String(val)?' selected':''}>${t}</option>`).join('');
 const fld=(label,key,val,step,attr='data-k')=>`<label>${label}<input type="number" step="${step||'any'}" ${attr}="${key}" value="${val??''}"></label>`;
 function renderG(){
@@ -520,9 +521,10 @@ function roomHTML(r){
   <div class="grid" style="margin-top:8px">
    <label>Nome<input type="text" data-k="name" value="${r.name}"></label>
    <label>Tipo<select data-k="tipo">${tipi.map(t=>`<option${t===r.tipo?' selected':''}>${t}</option>`).join('')}</select></label>
-   ${fld('Temp. interna (°C)','Ti',r.Ti,1)}
-   <label>Pareti esterne<select data-k="ext">${optsS([['0','nessuna'],['1L','una (lato lungo)'],['1S','una (lato corto)'],['2','due (angolo)'],['3','tre']],r.ext)}</select></label>
    ${fld('Lunghezza (m)','L',r.L,0.05)}${fld('Larghezza (m)','W',r.W,0.05)}
+   <label>Altezza (m)<input type="number" step="0.05" data-k="H" value="${r.H??''}" placeholder="${String(num(S.g.H,2.7)).replace('.',',')} se vuota"></label>
+   ${fld('Temp. interna (°C)','Ti',r.Ti,1)}
+   <label class="wide">Pareti esterne<select data-k="ext">${optsS([['0','nessuna'],['1L','una (lato lungo)'],['1S','una (lato corto)'],['2','due (angolo)'],['3','tre']],r.ext)}</select></label>
    ${fld('N. finestre','nWin',r.nWin,1)}
    <label>Dimensione finestre<select data-k="winSize">${optsS([[0.6,'piccola 0,6 m²'],[1.2,'media 1,2 m²'],[1.7,'normale 1,7 m²'],[2.5,'grande 2,5 m²'],[3.0,'molto grande 3 m²']],r.winSize)}</select></label>
    ${fld('N. portefinestre','nPF',r.nPF,1)}
@@ -534,13 +536,13 @@ function roomHTML(r){
   ${r.rads.map(radHTML).join('')}
   <div class="row" style="margin-top:8px"><button class="x" data-addrad="${r.id}">+ Radiatore</button><button class="x" data-dup="${r.id}">Duplica stanza</button><button class="x" data-del="${r.id}">Elimina stanza</button></div>
   <details class="adv"><summary>Dettagli (se li conosci)</summary><div class="grid" style="margin-top:8px">
-   ${fld('Altezza (m)','H',r.H,0.05)}${fld('Ricambi aria (1/h)','ach',r.ach,0.1)}
+   ${fld('Ricambi aria (1/h)','ach',r.ach,0.1)}${fld('U parete esterna','wallU',r.wallU,0.05)}
    ${fld('Area finestre (m²)','winArea',r.winArea,0.1)}${fld('U finestre','winU',r.winU,0.05)}
    ${fld('Area portefinestre (m²)','pfArea',r.pfArea,0.1)}${fld('U portefinestre','pfU',r.pfU,0.05)}
    <label>Pavimento verso<select data-k="floorTo">${optsS([['unh','piano sotto freddo'],['ground','terreno'],['heated','locale riscaldato']],r.floorTo)}</select></label>${fld('U pavimento','floorU',r.floorU,0.05)}
    <label>Soffitto verso<select data-k="ceilTo">${optsS([['unh','piano sopra freddo'],['out','tetto / esterno'],['heated','locale riscaldato']],r.ceilTo)}</select></label>${fld('U soffitto','ceilU',r.ceilU,0.05)}
-   ${fld('U parete esterna','wallU',r.wallU,0.05)}${fld('Pareti verso vani freddi (m²)','otherArea',r.otherArea,0.1)}
-  </div><p class="note" style="margin:6px 0 0">Lascia vuoto quello che non sai: vale il valore automatico (altezza generale, U dall'epoca della casa, U portefinestre come le finestre).</p></details></details>`}
+   ${fld('Pareti verso vani freddi (m²)','otherArea',r.otherArea,0.1)}
+  </div><p class="note" style="margin:6px 0 0">Lascia vuoto quello che non sai: vale il valore automatico (U dall'epoca della casa, U portefinestre come le finestre).</p></details></details>`}
 // stanze comunicanti: il legame vale nei due sensi (se l'altra stanza non ne ha già uno)
 function setComm(r,v){
   const old=S.rooms.find(x=>x.id==r.comm);if(old&&old.comm==r.id)old.comm='';
