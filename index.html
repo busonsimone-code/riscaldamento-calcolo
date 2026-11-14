@@ -345,18 +345,18 @@ function replCalc(x,scIdx){
   const c=x.c,need=c.scen[scIdx],have=c.have,miss=Math.max(0,need-have);
   const first=(x.r.rads||[])[0]||null;
   const em=(n,w,e)=>`${n} el. (${n*w+(e||0)} mm)`;
-  let add='—';
+  let add='—',nEl=0;
   if(have>0&&miss<=1)add='nessuna aggiunta';
   else if(first&&['alu','ghisa','tub'].includes(first.tipo)){
     const per0=first.tipo==='alu'?ALU[num(first.h,600)]:first.tipo==='ghisa'?(NEO[first.mod]?NEO[first.mod].w:(GHI[num(first.col,3)]||{})[num(first.h,600)]):tubEl(num(first.col,6),num(first.h,600));
     const per=(num(first.w)>0&&num(first.n)>0)?num(first.w)/num(first.n):per0; // se conosci la potenza del radiatore, uso quella per elemento
-    if(per)add=`+${Math.ceil(miss/per)} el. sul primo`;
+    if(per){nEl=Math.ceil(miss/per);add=`+${nEl} el. sul primo`}
   }else if(first&&first.tipo==='acc'){
     const perM=(ACC_M[first.acc]||0)*(ACC_H[num(first.h,600)]||1);
     if(perM)add=`+${Math.ceil(miss/perM*10)*100} mm`;
   }
   const t6=tubEl(6,600),t9=tubEl(6,900);
-  return {need,have,miss,add,
+  return {need,have,miss,add,nEl,
     tub600:em(Math.ceil(need/t6),TUB_W,TUB_END),tub900:em(Math.ceil(need/t9),TUB_W,TUB_END),
     acc22:`${Math.ceil(need/ACC_M['22']*10)*100} mm`,alu600:em(Math.ceil(need/ALU[600]),80)};
 }
@@ -587,12 +587,13 @@ function renderOut(){
     for(const r of S.rooms){const a=r.rads.find(x=>x.id==el.dataset.rest);if(a){el.textContent=(Math.round(radW(a))||'—')+' W';break}}});
   if(!R.rooms.length){document.getElementById('out').innerHTML='';document.getElementById('ans').innerHTML='';return}
   R.rooms.forEach(x=>{const el=document.querySelector(`[data-sum="${x.r.id}"]`);const z=R.zones.find(q=>q.grouped&&q.rooms.includes(x));
-    if(el)el.textContent=`— carico ${f0(x.c.tot)} W${x.c.have>0?`, radiatori ${f0(x.c.have)} W`:''}${z?` · in comune con ${z.rooms.filter(y=>y!==x).map(y=>y.r.name||'Stanza').join(', ')}`:''}`});
+    if(el)el.textContent=`— servono ${f0(x.c.tot)} W${x.c.have>0?`, i radiatori danno ${f0(x.c.avail)} W`:', nessun radiatore'}${z?` · in comune con ${z.rooms.filter(y=>y!==x).map(y=>y.r.name||'Stanza').join(', ')}`:(x.c.have>0?` (${x.c.avail>=x.c.tot?'avanzano '+f0(x.c.avail-x.c.tot):'mancano '+f0(x.c.tot-x.c.avail)} W)`:'')}`});
   const noRad=R.withRad===0,nBad=R.zones.filter(x=>x.c.ok===false).length,nOver=R.zones.filter(x=>x.c.over).length;
   const wm=R.wm2,wmCls=wm>110?'warn':'ok';
   const stanza=R.zones.map(x=>{const c=x.c;
     const st=c.ok===null?'<span class="note">nessun radiatore</span>':(c.ok?'<span class="ok">bastano</span>':(c.okMax?'<span class="warn">bastano solo con mandata alta</span>':`<span class="bad">non bastano nemmeno a ${f0(R.TfMax)} °C</span>`));
-    return `<tr><td>${x.r.name}</td><td>${f0(c.tot)}</td><td>${c.have>0?f0(c.have):'—'}</td><td>${c.have>0?f0(c.avail):'—'}</td><td>${st}</td><td>${c.have>0?(c.over?`<b class="bad">oltre il limite (servirebbero ${f0(c.TfNeed)} °C)</b>`:`<b class="${c.TfNeed>g.Tm+0.5?'warn':'ok'}">${f0(c.TfNeed)} °C</b>`):'—'}</td><td>${f0(c.cur)}</td><td style="text-align:left;white-space:normal">${equiv(c.cur)}</td></tr>`}).join('');
+    const d=c.have>0?c.avail-c.tot:null;
+    return `<tr><td>${x.r.name}</td><td><b>${f0(c.tot)}</b></td><td><b>${c.have>0?f0(c.avail):'—'}</b></td><td>${d==null?'—':(d>=0?`<span class="ok">+${f0(d)}</span>`:`<span class="bad">−${f0(-d)}</span>`)}</td><td>${st}</td><td>${c.have>0?(c.over?`<b class="bad">oltre il limite (servirebbero ${f0(c.TfNeed)} °C)</b>`:`<b class="${c.TfNeed>g.Tm+0.5?'warn':'ok'}">${f0(c.TfNeed)} °C</b>`):'—'}</td><td>${c.have>0?f0(c.have):'—'}</td></tr>`}).join('');
   const diss=R.rooms.map(x=>`<tr><td>${x.r.name}</td><td>${f1(x.c.A)}</td><td>${f0(x.c.Ti)}</td><td>${f0(x.c.pWall+x.c.pWin)}</td><td>${f0(x.c.pFloor+x.c.pCeil+x.c.pOther)}</td><td>${f0(x.c.pV)}</td><td>${f0(x.c.pR)}</td><td><b>${f0(x.c.tot)}</b></td><td>${f0(x.c.wm2)}</td></tr>`).join('');
   const scen=R.zones.map(x=>`<tr><td>${x.r.name}</td>${x.c.scen.map(v=>`<td>${f0(v)}</td>`).join('')}</tr>`).join('');
   const comps=[];
@@ -616,8 +617,16 @@ function renderOut(){
     cpHTML=`<div style="margin-top:10px;padding:10px 12px;background:var(--soft);border-radius:8px"><b>Per condensare (ritorno al massimo ${f0(cp.TrMax)} °C):</b> salto ${b.dT} K (par. 34 = ${cp.p34best}), mandata fino a ${b.Tf} °C e ritorno ${b.Tr} °C; ${cp.excl.length?'':`la mandata più bassa che basta è ${cp.Tf} °C (salto ${cp.dT} K, ritorno ${cp.Tr} °C).`}
      <br>${cp.excl.length?`<span class="warn">Restano corte anche così: ${cp.excl.map(e=>`${e.name}${e.miss>=1?` (mancano circa ${f0(e.miss)} W)`:' (quasi, per meno di 1 W)'}`).join(', ')}.</span>`:'<span class="ok">Bastano tutte le stanze con radiatori.</span>'}
      <div class="row no-print" style="margin-top:6px">${already?'<span class="note">Già impostato nei calcoli.</span>':`<button data-usecp="1">Usa ${b.Tf}/${b.Tr} nei calcoli</button>`}</div></div>`}
+  // stanza per stanza in chiaro: quanti W servono e quanti ne danno i radiatori che ci sono, alla mandata/ritorno scelti
+  const perRoom=R.zones.filter(x=>x.c.tot>50).map(x=>{const c=x.c;
+    if(!(c.have>0))return `<li><b>${x.r.name}</b>: servono <b>${f0(c.tot)} W</b>, nessun radiatore inserito</li>`;
+    const d=c.avail-c.tot,o=replCalc(x,SCEN.length);
+    const fix=d<0&&o.nEl?` → circa <b>${o.nEl} element${o.nEl>1?'i':'o'} in più</b> come quelli che hai${x.grouped?' (in una delle stanze comunicanti)':''}`:'';
+    return `<li><b>${x.r.name}</b>: servono <b>${f0(c.tot)} W</b>, i radiatori danno <b>${f0(c.avail)} W</b> → ${d>=0?`<span class="ok">avanzano ${f0(d)} W</span>`:`<span class="bad">mancano ${f0(-d)} W</span>`}${fix}</li>`}).join('');
   document.getElementById('ans').innerHTML=`<div class="card"><h2>Risposta</h2>
-   <p style="font-size:16px;margin:0 0 10px"><b class="${vcls}">Radiatori: ${verdict}.</b></p>
+   <p style="font-size:16px;margin:0 0 6px"><b class="${vcls}">Radiatori: ${verdict}.</b></p>
+   <p class="note" style="margin:0">Con ${f0(num(g.Te))} °C fuori e l'acqua a ${f0(num(g.Tm))}/${f0(num(g.Tr))} °C (mandata/ritorno):</p>
+   <ul class="l" style="margin:4px 0 10px">${perRoom}</ul>
    <div class="big">
     <div class="kpi"><b>${f1(R.tot/1000)} kW</b><span>carico termico del piano a ${f0(num(g.Te))} °C esterni</span></div>
     <div class="kpi"><b class="${wmCls}">${f0(wm)} W/m²</b><span>su ${f1(R.area)} m² (tipico: 50-100 ben isolato, 100-150 vecchio)</span></div>
@@ -628,8 +637,8 @@ function renderOut(){
   const openD=[...document.querySelectorAll('#out details')].map(d=>d.open); // non richiudere le sezioni già aperte
   document.getElementById('out').innerHTML=`
   ${chkHTML}
-  <div class="card"><h2>Stanza per stanza: carico e radiatori</h2><div class="tw"><table><tr><th>Stanza</th><th>Carico W</th><th>Radiatori inseriti W (ΔT50)</th><th>Rendono a ${f0(num(g.Tm))}/${f0(num(g.Tr))} W</th><th>Esito</th><th>Mandata minima</th><th>Servirebbero a ${f0(num(g.Tm))}/${f0(num(g.Tr))} W (ΔT50)</th><th>Equivalgono a (indicativo)</th></tr>${stanza}</table></div>
-   <p class="note">«Rendono» è la potenza che i tuoi radiatori danno con la mandata scelta. «Mandata minima» è la temperatura di mandata con cui bastano a freddo di progetto. Le equivalenze sono indicative: confronta sempre con la scheda del radiatore scelto.${R.zones.some(z=>z.grouped)?' Le stanze comunicanti sono valutate come un\'unica zona (carichi e radiatori sommati): i radiatori dell\'una scaldano anche l\'altra, quindi una può compensare l\'altra.':''}</p></div>
+  <div class="card"><h2>Stanza per stanza: W che servono e W che danno i radiatori</h2><div class="tw"><table class="st"><tr><th>Stanza</th><th>Servono W</th><th>I radiatori danno W (a ${f0(num(g.Tm))}/${f0(num(g.Tr))})</th><th>Avanzano + / mancano −</th><th>Esito</th><th>Mandata minima</th><th>Radiatori da catalogo W (a ΔT50)</th></tr>${stanza}</table></div>
+   <p class="note">«Servono» è il calore che la stanza perde con ${f0(num(g.Te))} °C fuori (più la ripresa). «I radiatori danno» è quanto rendono davvero i radiatori che ci sono con l'acqua a ${f0(num(g.Tm))}/${f0(num(g.Tr))} °C. Il valore «da catalogo» è la potenza scritta sulle schede, a ΔT50 (acqua a 75/65 °C e stanza a 20 °C): con acqua meno calda rendono meno, per questo è più alto di quello che danno davvero. «Mandata minima» è la mandata con cui bastano a freddo di progetto. Le misure dei radiatori nuovi sono nella tabella «Aggiungere o sostituire».${R.zones.some(z=>z.grouped)?' Le stanze comunicanti sono valutate come un\'unica zona (carichi e radiatori sommati): i radiatori dell\'una scaldano anche l\'altra, quindi una può compensare l\'altra.':''}</p></div>
   ${sol}
   <details class="more"><summary>Aggiungere o sostituire i radiatori (tabella)</summary>${repl}</details>
   <details class="more"><summary>Potenza richiesta a ΔT50 per diverse mandate/ritorno</summary><div class="tw" style="margin-top:8px"><table><tr><th>Stanza</th>${SCEN.map(([m,r])=>`<th>${m}/${r}</th>`).join('')}</tr>${scen}</table></div>
