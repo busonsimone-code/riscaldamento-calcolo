@@ -45,6 +45,10 @@ th{color:var(--mut);font-weight:600}
 ul.l{margin:6px 0 0 18px;padding:0}ul.l li{margin:3px 0}
 svg text{fill:var(--mut);font-size:11px}
 .hide{display:none}
+details.more{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin:12px 0}
+details.more>summary{cursor:pointer;font-weight:600}
+details.more>.card{border:0;padding:0;margin:8px 0 0}
+details.more h2{display:none}
 .pc{border:1px solid var(--line);border-radius:10px;padding:10px 12px;margin:10px 0;background:var(--card)}
 .pc.dn{border-color:var(--ok);background:var(--soft)}
 .pc .pn{font-weight:600;font-size:15.5px;line-height:1.3}
@@ -78,6 +82,7 @@ svg text{fill:var(--mut);font-size:11px}
 
 <div class="row no-print" id="tabs" style="margin:8px 0"><button data-view="calc" class="pri">Calcolo</button><button data-view="cald">Caldaia e ΔT</button><button data-view="posto">Sul posto</button></div>
 <div id="viewCalc">
+<div id="ans"></div>
 <div class="card no-print">
   <h2>1. La casa</h2>
   <div class="grid">
@@ -294,7 +299,7 @@ function solRoom(S,x,R,Z){
     const tb=num(g.TuBelow),ta=num(g.TuAbove);
     add('tu',`Se i piani sopra/sotto restano a ${r1(tb+3)}/${r1(ta+3)} °C invece di ${r1(tb)}/${r1(ta)} (scale aperte, un po' di calore che sale o scende)`,calc(Object.assign({},g,{TuBelow:tb+3,TuAbove:ta+3}),r),'da verificare misurando la temperatura di quei piani');
   }
-  add('ti',`Stanza a ${r1(c.Ti-1)} °C invece di ${r1(c.Ti)}`,withR({Ti:c.Ti-1}));
+  add('ti',`Stanza a ${r1(c.Ti-1)} °C invece di ${r1(c.Ti)} (set del cronotermostato più basso, o valvola termostatica sul radiatore)`,withR({Ti:c.Ti-1}));
   const allAfter=calc(gComb,Object.assign({},r,comb));
   return {opts,allDW:tot0-allAfter};
 }
@@ -536,7 +541,7 @@ function renderOut(){
   const R=sysCalc(S),g=S.g;
   document.querySelectorAll('[data-rest]').forEach(el=>{
     for(const r of S.rooms){const a=r.rads.find(x=>x.id==el.dataset.rest);if(a){el.textContent=(Math.round(radW(a))||'—')+' W';break}}});
-  if(!R.rooms.length){document.getElementById('out').innerHTML='';return}
+  if(!R.rooms.length){document.getElementById('out').innerHTML='';document.getElementById('ans').innerHTML='';return}
   R.rooms.forEach(x=>{const el=document.querySelector(`[data-sum="${x.r.id}"]`);const z=R.zones.find(q=>q.grouped&&q.rooms.includes(x));
     if(el)el.textContent=`— carico ${f0(x.c.tot)} W${x.c.have>0?`, radiatori ${f0(x.c.have)} W`:''}${z?` · in comune con ${z.rooms.filter(y=>y!==x).map(y=>y.r.name||'Stanza').join(', ')}`:''}`});
   const noRad=R.withRad===0,nBad=R.zones.filter(x=>x.c.ok===false).length,nOver=R.zones.filter(x=>x.c.over).length;
@@ -552,7 +557,7 @@ function renderOut(){
   comps.push(`<li><b>Circolatore:</b> ${f0(R.Qtot)} L/h a circa <b>${f1(R.Hm)} m c.a.</b> (stima con ${f0(num(g.Lcirc,40))} m di circuito, 150 Pa/m + 30% di perdite localizzate + 10 kPa per valvole e radiatore). Verifica sul circuito reale; va bene un elettronico a velocità variabile.</li>`);
   comps.push(`<li><b>Vaso di espansione:</b> acqua ${f0(R.Vimp)} L, espansione ${(R.e*100).toFixed(1).replace('.',',')}% a ${f0(num(g.Tmax,80))} °C → <b>${f1(R.Vn)} L</b>${R.Vstd?` → vaso standard da <b>${R.Vstd} L</b> (sottrai quello già nella caldaia)`:' → oltre gli 80 L'}.</li>`);
   comps.push(`<li><b>Tubi dei rami:</b> ${R.rooms.map(x=>{const p=pipeFor(x.c.Q,0.7);return `${x.r.name} ${f0(x.c.Q)} L/h → ${p.name}`}).join('; ')} (v ≤ 0,7 m/s).</li>`);
-  comps.push(`<li><b>Accessori:</b> valvola termostatica su ogni radiatore (tranne il locale con il termostato ambiente) e detentore per bilanciare, sonda esterna con curva climatica, defangatore/filtro magnetico, valvola di sfogo aria, valvola di sicurezza ${f0(num(g.Psv,3))} bar, manometro, rubinetto di carico.</li>`);
+  comps.push(`<li><b>Accessori:</b> valvola termostatica sui radiatori delle stanze (la temperatura la misura solo il cronotermostato in corridoio: senza valvole non puoi regolare una stanza per conto suo) e detentore per bilanciare, sonda esterna con curva climatica, defangatore/filtro magnetico, valvola di sfogo aria, valvola di sicurezza ${f0(num(g.Psv,3))} bar, manometro, rubinetto di carico.</li>`);
   const crv=[15,10,5,0,-5,-10].filter(t=>t>=Math.min(num(g.Te),-10)-0.01).map(t=>{const p=R.curve.find(q=>q[0]===t);return p?`<tr><td>${t} °C</td><td>${p[1]>R.TfMax?`<b class="bad">${f0(p[1])} °C (oltre il limite)</b>`:`<b>${f0(p[1])} °C</b>`}</td></tr>`:''}).join('');
   const verdict=noRad?'inserisci i radiatori per sapere a che mandata bastano':(nOver?`${nOver} stanz${nOver>1?'e non bastano':'a non basta'} nemmeno alla mandata massima di ${f0(R.TfMax)} °C: vedi «Soluzioni»`:(nBad?`${nBad} stanz${nBad>1?'e bastano':'a basta'} solo con mandata più alta di ${f0(num(g.Tm))}/${f0(num(g.Tr))}, ma entro il limite`:`tutte le stanze con radiatori bastano a ${f0(num(g.Tm))}/${f0(num(g.Tr))}`));
   const sol=solHTML(R,S),repl=replHTML(R,S);
@@ -560,25 +565,32 @@ function renderOut(){
   const warnCurve=R.curve.some(p=>p[1]>R.TfMax)?`<p class="note bad">Sotto i ${f0((R.curve.filter(p=>p[1]>R.TfMax).sort((a,b)=>b[0]-a[0])[0]||[0])[0])} °C esterni la casa non resta in temperatura con questi radiatori, perché servirebbe una mandata oltre il limite di ${f0(R.TfMax)} °C.</p>`:'';
   const chk=checks(S,R);
   const chkHTML=`<div class="card"><h2>Controlli sui dati</h2>${chk.length?'<ul class="l">'+chk.map(c=>`<li class="${c.cls}">${c.txt}</li>`).join('')+'</ul>':'<p class="ok">Dati coerenti: nessun problema trovato.</p>'}</div>`;
-  document.getElementById('out').innerHTML=`
-  ${chkHTML}<div class="card"><h2>3. Risultato</h2>
+  const vcls=noRad?'':(nOver?'bad':(nBad?'warn':'ok'));
+  document.getElementById('ans').innerHTML=`<div class="card"><h2>Risposta</h2>
+   <p style="font-size:16px;margin:0 0 10px"><b class="${vcls}">Radiatori: ${verdict}.</b></p>
    <div class="big">
     <div class="kpi"><b>${f1(R.tot/1000)} kW</b><span>carico termico del piano a ${f0(num(g.Te))} °C esterni</span></div>
     <div class="kpi"><b class="${wmCls}">${f0(wm)} W/m²</b><span>su ${f1(R.area)} m² (tipico: 50-100 ben isolato, 100-150 vecchio)</span></div>
     <div class="kpi"><b>${f1(R.kW)} kW</b><span>potenza minima caldaia in riscaldamento</span></div>
     <div class="kpi"><b class="${noRad?'':(R.worst.c.over?'bad':(nBad?'warn':'ok'))}">${noRad?'—':(R.worst.c.over?'oltre '+f0(R.TfMax)+' °C':f0(R.worst.c.TfNeed)+' °C')}</b><span>${noRad?'mandata minima: inserisci i radiatori':(R.worst.c.over?`con i radiatori inseriti la stanza peggiore (${R.worst.r.name}) servirebbe a ${f0(R.worst.c.TfNeed)} °C: oltre il limite di ${f0(R.TfMax)} °C`:`mandata minima necessaria a freddo di progetto (stanza peggiore: ${R.worst.r.name})`)}</span></div>
-   </div><p class="note" style="margin-top:8px">Radiatori: ${verdict}.${calNote}</p></div>
+   </div>${calNote?`<p class="note" style="margin-top:8px">${calNote.trim()}</p>`:''}
+   <div class="row no-print" style="margin-top:8px"><button data-goto="out">Vai ai dettagli ↓</button></div></div>`;
+  const openD=[...document.querySelectorAll('#out details')].map(d=>d.open); // non richiudere le sezioni già aperte
+  document.getElementById('out').innerHTML=`
+  ${chkHTML}
   <div class="card"><h2>Stanza per stanza: carico e radiatori</h2><div class="tw"><table><tr><th>Stanza</th><th>Carico W</th><th>Radiatori inseriti W (ΔT50)</th><th>Rendono a ${f0(num(g.Tm))}/${f0(num(g.Tr))} W</th><th>Esito</th><th>Mandata minima</th><th>Servirebbero a ${f0(num(g.Tm))}/${f0(num(g.Tr))} W (ΔT50)</th><th>Equivalgono a (indicativo)</th></tr>${stanza}</table></div>
    <p class="note">«Rendono» è la potenza che i tuoi radiatori danno con la mandata scelta. «Mandata minima» è la temperatura di mandata con cui bastano a freddo di progetto. Le equivalenze sono indicative: confronta sempre con la scheda del radiatore scelto.${R.zones.some(z=>z.grouped)?' Le stanze comunicanti sono valutate come un\'unica zona (carichi e radiatori sommati): i radiatori dell\'una scaldano anche l\'altra, quindi una può compensare l\'altra.':''}</p></div>
-  ${sol}${repl}
-  <div class="card"><h2>Potenza richiesta a ΔT50 (W) per diverse mandate/ritorno</h2><div class="tw"><table><tr><th>Stanza</th>${SCEN.map(([m,r])=>`<th>${m}/${r}</th>`).join('')}</tr>${scen}</table></div>
-   <p class="note">Più bassa è la mandata, più grandi devono essere i radiatori. ΔT50 = potenza da catalogo a 75/65/20 °C (UNI EN 442).</p></div>
+  ${sol}
+  <details class="more"><summary>Aggiungere o sostituire i radiatori (tabella)</summary>${repl}</details>
+  <details class="more"><summary>Potenza richiesta a ΔT50 per diverse mandate/ritorno</summary><div class="tw" style="margin-top:8px"><table><tr><th>Stanza</th>${SCEN.map(([m,r])=>`<th>${m}/${r}</th>`).join('')}</tr>${scen}</table></div>
+   <p class="note">Più bassa è la mandata, più grandi devono essere i radiatori. ΔT50 = potenza da catalogo a 75/65/20 °C (UNI EN 442).</p></details>
   <div class="card"><h2>Curva climatica teorica della tua casa</h2>
    <div class="row" style="align-items:flex-start;gap:20px"><div style="flex:1 1 320px">${curveSVG(R.curve,R.TfMax)}</div>
    <div><table><tr><th>Esterna</th><th>Mandata</th></tr>${crv}</table></div></div>
    <p class="note">Mandata necessaria per tenere ogni stanza alla sua temperatura al variare della temperatura esterna, con carico proporzionale a (Ti − Te) e salto ${f0(R.dTc)} K fisso (quello che imposti sul circolatore, par. 34). Serve per scegliere curva e offset sulla caldaia: la curva impostata deve stare sopra questa a ogni temperatura esterna, senza esagerare.</p>${warnCurve}</div>
   <details class="card"><summary style="cursor:pointer;font-weight:600">Dettaglio dispersioni per stanza (W)</summary><div class="tw" style="margin-top:8px"><table><tr><th>Stanza</th><th>m²</th><th>Ti °C</th><th>Pareti+vetri</th><th>Pav.+soffitto+vani</th><th>Aria</th><th>Ripresa</th><th>Totale</th><th>W/m²</th></tr>${diss}<tr><td><b>Totale</b></td><td>${f1(R.area)}</td><td></td><td></td><td></td><td></td><td></td><td><b>${f0(R.tot)}</b></td><td>${f0(R.wm2)}</td></tr></table></div></details>
   <div class="card"><h2>Componenti</h2><ul class="l">${comps.join('')}</ul></div>`;
+  document.querySelectorAll('#out details').forEach((d,i)=>{if(openD[i])d.open=true});
 }
 
 /* ---------- pagina caldaia: letture e salto ΔT ---------- */
@@ -612,7 +624,7 @@ function renderCald(){
     return `<details class="room" data-lid="${l.id}" open><summary>${l.quando||'Lettura '+l.id} <span class="note" data-lsum="${l.id}">${d?'— ΔT '+f1(d.dT)+' K':''}</span></summary>
     <div class="grid" style="margin-top:8px">
      <label>Quando (data e ora)<input type="text" data-lk="quando" value="${l.quando||''}"></label>
-     ${lf('Temperatura esterna (°C)','Te',l.Te)}${lf('Temperatura stanza sull\'RC21 (°C)','Ti',l.Ti)}${lf('Set mandata (°C)','setM',l.setM)}
+     ${lf('Temperatura esterna (°C)','Te',l.Te)}${lf('Temperatura ambiente sull\'RC21, in corridoio (°C)','Ti',l.Ti)}${lf('Set mandata (°C)','setM',l.setM)}
      ${lf('Temperatura mandata (°C)','Tm',l.Tm)}${lf('Temperatura ritorno (°C)','Tr',l.Tr)}${lf('Modulazione potenza (%)','mod',l.mod)}
      ${lf('Pressione impianto (bar)','press',l.press)}${lf('Temperatura fumi (°C)','fumi',l.fumi)}
      <label>Nota (pompa, valvole, stanze…)<input type="text" data-lk="nota" value="${l.nota||''}"></label>
@@ -621,7 +633,7 @@ function renderCald(){
     <div class="row" style="margin-top:8px"><button class="x" data-dell="${l.id}">Elimina lettura</button></div></details>`}).join('');
   document.getElementById('viewCald').innerHTML=`
   <div class="card"><div class="row" style="justify-content:space-between"><h2 style="margin:0">Letture della caldaia e salto ΔT</h2><button class="pri" data-addl="1">+ Lettura</button></div>
-   <p class="note">Sul comando remoto: Menu → Informazioni → Riscaldamento. Leggi mandata, ritorno, modulazione e pressione a regime, dopo 30-60 minuti con il bruciatore acceso e i radiatori caldi: nei primi minuti il salto è sempre grande. La temperatura esterna è quella del display (se c'è la sonda) o di un termometro.</p>
+   <p class="note">Sul comando remoto: Menu → Informazioni → Riscaldamento. Leggi mandata, ritorno, modulazione e pressione a regime, dopo 30-60 minuti con il bruciatore acceso e i radiatori caldi: nei primi minuti il salto è sempre grande. La temperatura esterna è quella del display (se c'è la sonda) o di un termometro. L'unica temperatura ambiente misurata è quella del cronotermostato RC21 in corridoio: dice quando spegnere la caldaia, non quanto sono calde le singole stanze (se una stanza è fredda e il corridoio è a set, i radiatori di quella stanza sono troppo piccoli o chiusi).</p>
    <p><b id="lsum">${lettSum()}</b></p>${kf}
    ${items||'<p class="note">Premi «+ Lettura» e scrivi i valori che leggi.</p>'}</div>
   <div class="card"><h2>Impostazioni attuali (annotale prima di cambiarle)</h2>
@@ -736,6 +748,7 @@ document.addEventListener('input',e=>{
 document.addEventListener('click',e=>{
   const b=e.target.closest('button');if(!b)return;
   if(b.dataset.view){setView(b.dataset.view);return}
+  if(b.dataset.goto){const el=document.getElementById(b.dataset.goto);if(el)el.scrollIntoView({behavior:'smooth',block:'start'});return}
   if(b.dataset.pexp){document.getElementById('exportJson').click();return}
   if(b.dataset.addl){S.cald.letture.push({id:lid++,quando:new Date().toLocaleString('it-IT',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'}),Te:'',Ti:'',setM:'',Tm:'',Tr:'',mod:'',press:'',fumi:'',nota:''});save();renderCald();return}
   if(b.dataset.dell){S.cald.letture=S.cald.letture.filter(l=>l.id!=b.dataset.dell);save();renderCald();return}
