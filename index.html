@@ -68,6 +68,8 @@ details.more h2{display:none}
 .pc .pdone input{width:24px;height:24px;margin:0;flex:none}
 .sec-h{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
 .sec-h .cnt{font-size:13px;color:var(--mut);white-space:nowrap}
+#viewRel table{font-size:12.5px}#viewRel th,#viewRel td{padding:4px 5px}
+@media (max-width:700px){#viewRel th,#viewRel td{white-space:normal}}
 .st th:first-child,.st td:first-child{position:sticky;left:0;background:var(--card);z-index:1}
 #viewPosto details.how{margin:6px 0 0}
 #viewPosto details.how>summary{cursor:pointer;font-weight:600}
@@ -86,12 +88,13 @@ details.more h2{display:none}
 <h1>Dimensionamento riscaldamento</h1>
 <p class="sub">Calcolo semplificato ispirato alla UNI EN 12831 per riscaldare un solo piano con piani freddi sopra e sotto. Dove non sai un dato lascia il valore proposto. Quello che vedi ora è un esempio da sostituire.</p>
 
-<div class="row no-print" id="tabs" style="margin:8px 0"><button data-view="calc" class="pri">Calcolo</button><button data-view="cald">Caldaia e ΔT</button><button data-view="posto">Sul posto</button></div>
+<div class="row no-print" id="tabs" style="margin:8px 0"><button data-view="calc" class="pri">Calcolo</button><button data-view="cald">Caldaia e ΔT</button><button data-view="posto">Sul posto</button><button data-view="rel">Relazione</button></div>
 <div id="viewCalc">
 <div id="ans"></div>
 <div class="card no-print">
   <h2>1. La casa</h2>
   <div class="grid">
+    <label class="wide">Tipo di calcolo<select data-g="mode"><option value="norma">A norma (UNI EN 12831-1, radiatori UNI EN 442-2)</option><option value="tarato">Tarato sul funzionamento reale</option></select></label>
     <label>Comune<select id="comune"></select></label>
     <label>Temp. minima esterna (°C)<input type="number" step="1" data-g="Te"></label>
     <label class="wide">Com'è costruita la casa<select data-g="epoca" id="epoca"></select></label>
@@ -101,13 +104,14 @@ details.more h2{display:none}
     <label>Ritorno massimo (°C)<input type="number" step="1" data-g="TrMax"></label>
     <label class="wide">Salto sul circolatore (par. 34)<select data-g="dTp"><option value="20">20 K (par. 34 = 0)</option><option value="15">15 K (par. 34 = 1)</option><option value="10">10 K (par. 34 = 2)</option><option value="5">5 K (par. 34 = 3)</option></select></label>
   </div>
-  <p class="note">Mandata massima: il limite di caldaia e tubi. Ritorno massimo: oltre questo la caldaia non condensa. Le temperature minime per comune sono indicative: verificale. «Com'è costruita la casa» imposta da sola muri, finestre, solai e ricambi d'aria.</p>
+  <p class="note">Mandata massima: il limite di caldaia e tubi. Ritorno massimo: oltre questo la caldaia non condensa. Le temperature minime per comune sono indicative: verificale. «Com'è costruita la casa» dà i valori tipici di muri, finestre e solai quando nella scheda 2 non scegli la struttura vera. Il calcolo «tarato» moltiplica i carichi per farli tornare con il giorno che ricordi o con una lettura della caldaia: utile per capire, ma non è a norma.</p>
   <details class="adv"><summary>Impostazioni avanzate (di solito non servono)</summary><div class="grid" id="gForm" style="margin-top:8px"></div></details>
 </div>
+<div class="card no-print" id="strCard"></div>
 
 <div class="card no-print">
   <div class="row" style="justify-content:space-between">
-    <h2 style="margin:0">2. Stanze e radiatori del piano riscaldato</h2>
+    <h2 style="margin:0">3. Stanze e radiatori del piano riscaldato</h2>
     <div class="row">
       <button id="addRoom" class="pri">+ Stanza</button>
       <button id="clearAll">Svuota</button>
@@ -126,6 +130,7 @@ details.more h2{display:none}
 </div>
 <div id="viewCald" class="hide"></div>
 <div id="viewPosto" class="hide"></div>
+<div id="viewRel" class="hide"></div>
 </main>
 
 <script>
@@ -176,29 +181,83 @@ function eExp(T){const t=[10,20,30,40,50,60,70,80,90],r=[999.7,998.2,995.7,992.2
   T=Math.min(90,Math.max(10,T));let i=0;while(i<t.length-2&&T>t[i+1])i++;
   const rho=r[i]+(r[i+1]-r[i])*(T-t[i])/(t[i+1]-t[i]);return 999.7/rho-1}
 function wallLen(r){const L=num(r.L),W=num(r.W),mx=Math.max(L,W),mn=Math.min(L,W);return ({'0':0,'1L':mx,'1S':mn,'2':L+W,'3':L+W+mx})[r.ext]??0}
+// ---- dati per il calcolo a norma (UNI EN 12831-1) ----
+const N50={nonso:7,s70:10,s90:6,s2000:4,nuova:2}; // tenuta all'aria tipica (ricambi/h a 50 Pa) per epoca: stima
+// abaco muri: U calcolata con UNI EN ISO 6946 (Rsi 0,13, Rse 0,04) e conduttività tipiche (UNI 10351): da verificare sulla parete vera
+const MURI={mp25:{n:'Mattoni pieni 25 cm, intonacato',U:1.81},mp38:{n:'Mattoni pieni 38 cm, intonacato',U:1.37},mp50:{n:'Mattoni pieni 50 cm, intonacato',U:1.11},
+ bl25:{n:'Blocco semipieno in laterizio 25 cm',U:1.33},cv:{n:'Cassa vuota: forato 12 + aria + forato 8 (anni 60-80)',U:1.12},cvi:{n:'Cassa vuota con 4 cm di isolante (anni 80-90)',U:0.53},
+ pt30:{n:'Blocco alveolato tipo Poroton 30 cm',U:0.67},pi50:{n:'Pietra 50 cm',U:2.37},ca20:{n:'Calcestruzzo 20 cm',U:3.4},cap:{n:'Muratura con cappotto 10 cm',U:0.27}};
+const MAT={intonaco:{n:'Intonaco calce-cemento',l:0.90},gesso:{n:'Intonaco di gesso',l:0.40},mpieno:{n:'Mattone pieno',l:0.72},semipieno:{n:'Mattone semipieno / blocco',l:0.45},
+ forato:{n:'Laterizio forato',l:0.40},poroton:{n:'Blocco alveolato (Poroton)',l:0.23},cls:{n:'Calcestruzzo armato',l:2.3},pietra:{n:'Pietra',l:2.3},
+ aria:{n:"Intercapedine d'aria ferma",R:0.18},eps:{n:'Polistirene EPS',l:0.035},xps:{n:'Polistirene XPS',l:0.034},lana:{n:'Lana di roccia / vetro',l:0.037},
+ sughero:{n:'Sughero',l:0.045},fibra:{n:'Fibra di legno',l:0.040},cartongesso:{n:'Cartongesso',l:0.21},legno:{n:'Legno',l:0.13}};
+function layR(l){const M=MAT[l.m];if(!M)return 0;const s=num(l.s)/100;if(M.R!=null)return s>0?(s>=0.025?M.R:0.15):0;return s>0?s/M.l:0}
+function strataU(lays){const R=0.13+0.04+(lays||[]).reduce((t,l)=>t+layR(l),0);return 1/R}
+const SOLAI={lc:{n:'Laterocemento senza isolante',Uup:1.7,Udn:1.4},lci:{n:'Laterocemento con 4 cm di isolante',Uup:0.63,Udn:0.58},lg:{n:'Solaio in legno con assito',Uup:1.6,Udn:1.4}};
+const FIN={vs_l:{n:'Vetro singolo, telaio in legno',U:4.9},vs_m:{n:'Vetro singolo, telaio metallico',U:5.8},dv_l:{n:'Doppio vetro (4-12-4), legno',U:2.8},
+ dv_a:{n:'Doppio vetro, alluminio senza taglio termico',U:3.7},dv_at:{n:'Doppio vetro, alluminio a taglio termico',U:3.0},dv_p:{n:'Doppio vetro, PVC',U:2.7},
+ be:{n:'Doppio vetro basso emissivo con gas',U:1.4},tr:{n:'Triplo vetro',U:1.0}};
+// locali non riscaldati: fattore b = (θint − θu)/(θint − θe), valori tipici del prospetto della UNI/TS 11300-1 (verifica sulla norma)
+const BU={nota:{n:'temperatura nota (scritta nelle impostazioni avanzate)',b:null},p1:{n:'locale con 1 parete esterna',b:0.4},p2:{n:'locale con 2+ pareti esterne, senza finestre',b:0.5},
+ p2f:{n:'locale con 2+ pareti esterne e finestre (es. altro piano chiuso)',b:0.6},p3:{n:'locale con 3 pareti esterne (es. vano scala)',b:0.8},
+ int:{n:'interrato o seminterrato senza finestre',b:0.5},intf:{n:'interrato o seminterrato con finestre',b:0.8},
+ stv:{n:'sottotetto molto ventilato',b:1.0},stn:{n:'sottotetto, tetto non isolato',b:0.9},sti:{n:'sottotetto, tetto isolato',b:0.7}};
+// coefficiente di schermatura e (UNI EN 12831) per [nessuna apertura esposta, una, più di una]
+const ESP={riparata:{n:'riparata (tra le case, alberi)',e:[0,0.01,0.02]},normale:{n:'normale',e:[0,0.02,0.03]},esposta:{n:'esposta al vento (campagna, collina)',e:[0,0.03,0.05]}};
+const NMIN=t=>(t==='Bagno'||t==='Cucina')?1.5:0.5; // ricambi minimi (UNI EN 12831): bagno e cucina 1,5, altri locali 0,5
+// trasmittanze in uso: struttura scelta, altrimenti valore tipico dell'epoca, con la provenienza
+function envU(g){const P=EPOCHE[g.epoca]||EPOCHE.nonso,ep="valore tipico dell'epoca";
+  const wall=g.wallType==='strat'?{U:strataU(g.wallLay),src:'stratigrafia scritta da te (UNI EN ISO 6946)'}:MURI[g.wallType]?{U:MURI[g.wallType].U,src:MURI[g.wallType].n}:{U:P.wall,src:ep};
+  const win=FIN[g.winType]?{U:FIN[g.winType].U,src:FIN[g.winType].n}:{U:P.win,src:ep};
+  const sl=(t,key,own)=>SOLAI[t]?{U:SOLAI[t][key],src:SOLAI[t].n}:(t==='U'&&num(own)>0)?{U:num(own),src:'scritta da te'}:{U:P.slab,src:ep};
+  return {wall,win,ceil:sl(g.ceilType,'Uup',g.ceilUg),floor:sl(g.floorType,'Udn',g.floorUg),roof:{U:P.roof,src:ep},
+    n50:num(g.n50)>0?num(g.n50):(N50[g.epoca]||7),n50src:num(g.n50)>0?'scritto da te':"tipico dell'epoca"}}
+// temperatura di un locale non riscaldato accanto: dal fattore b, oppure quella nota
+function thetaU(type,Ti,Te,Tnota){const B=BU[type]||BU.p2f;return B.b!=null?Ti-B.b*(Ti-Te):num(Tnota,12)}
+function radN(a,g){return (a.tipo==='ghisa'&&NEO[a.mod])?NEO[a.mod].n:num(g.expo,1.3)}
+// ---- carico termico di progetto della stanza (UNI EN 12831-1) ----
 function roomCalc(r,g){
-  const P=EPOCHE[g.epoca]||EPOCHE.nonso;
+  const E=envU(g),dU=(g.dUtb===''||g.dUtb==null)?0.10:num(g.dUtb,0.10);
   const Te=num(g.Te),Ti=num(r.Ti,20),H=num(r.H,0)||num(g.H,2.7),A=num(r.L)*num(r.W),V=A*H,dTe=Ti-Te;
   const winF=num(r.winArea)>0?num(r.winArea):num(r.nWin)*num(r.winSize);
   const winP=num(r.pfArea)>0?num(r.pfArea):num(r.nPF)*num(r.pfSize);
   const win=winF+winP;
   const wallA=Math.max(0,wallLen(r)*H-win);
-  const Uw=num(r.wallU)>0?num(r.wallU):P.wall, Uv=num(r.winU)>0?num(r.winU):P.win, Up=num(r.pfU)>0?num(r.pfU):Uv;
-  const Uf=num(r.floorU)>0?num(r.floorU):P.slab, Uc=num(r.ceilU)>0?num(r.ceilU):(r.ceilTo==='out'?P.roof:P.slab);
-  const Uo=num(r.otherU)>0?num(r.otherU):P.wall;
-  const Tf=({unh:num(g.TuBelow),heated:Ti,ground:10,out:Te})[r.floorTo]??num(g.TuBelow);
-  const Tc=({unh:num(g.TuAbove),heated:Ti,out:Te})[r.ceilTo]??num(g.TuAbove);
-  const pWall=Uw*wallA*dTe, pWin=(Uv*winF+Up*winP)*dTe, pFloor=Uf*A*(Ti-Tf), pCeil=Uc*A*(Ti-Tc);
-  const pOther=Uo*num(r.otherArea)*(Ti-num(g.TuSide));
-  const pT=Math.max(0,(pWall+pWin+pFloor+pCeil+pOther)*(1+num(g.tb)/100));
-  const n=(r.ach===''||r.ach==null)?P.ach:num(r.ach,P.ach);
-  const pV=Math.max(0,0.34*n*V*dTe);
+  // trasmissione: U dell'elemento + ΔU dei ponti termici sugli elementi opachi
+  const Uw=(num(r.wallU)>0?num(r.wallU):E.wall.U)+dU, Uv=num(r.winU)>0?num(r.winU):E.win.U, Up=num(r.pfU)>0?num(r.pfU):Uv;
+  const Uf=r.floorTo==='heated'?0:(num(r.floorU)>0?num(r.floorU):E.floor.U)+dU;
+  const Uc=r.ceilTo==='heated'?0:(num(r.ceilU)>0?num(r.ceilU):(r.ceilTo==='out'?E.roof.U:E.ceil.U))+dU;
+  const Uo=(num(r.otherU)>0?num(r.otherU):E.wall.U)+dU;
+  const Tf=r.floorTo==='heated'?Ti:r.floorTo==='ground'?10:r.floorTo==='out'?Te:thetaU(g.dnType,Ti,Te,g.TuBelow);
+  const Tc=r.ceilTo==='heated'?Ti:r.ceilTo==='out'?Te:thetaU(g.upType,Ti,Te,g.TuAbove);
+  const Ts=thetaU(g.sdType,Ti,Te,g.TuSide);
+  const pWall=Uw*wallA*dTe, pWin=(Uv*winF+Up*winP)*dTe, pFloor=Uf*A*(Ti-Tf), pCeil=Uc*A*(Ti-Tc), pOther=Uo*num(r.otherArea)*(Ti-Ts);
+  const pT=Math.max(0,pWall+pWin+pFloor+pCeil+pOther);
+  // ventilazione: il maggiore tra ricambio minimo e infiltrazioni (2·V·n50·e·ε, ε = 1 sotto i 10 m)
+  const nExp=({'0':0,'1L':1,'1S':1,'2':2,'3':2})[r.ext]??0;
+  const e=(ESP[g.esp]||ESP.normale).e[nExp],nMin=NMIN(r.tipo);
+  const Vinf=2*V*E.n50*e, Vmin=nMin*V, own=!(r.ach===''||r.ach==null);
+  const Vi=own?num(r.ach)*V:Math.max(Vinf,Vmin);
+  const pV=Math.max(0,0.34*Vi*dTe);
   const pR=(pT+pV)*num(g.rip)/100;
   const tot=pT+pV+pR;
-  const have=(r.rads||[]).reduce((s,a)=>s+radW(a),0);
-  return {Ti,A,V,H,dTe,wallA,win,winF,winP,pWall,pWin,pFloor,pCeil,pOther,pT,pV,pR,tot,wm2:A>0?tot/A:0,have};
+  const rads=r.rads||[],have=rads.reduce((s,a)=>s+radW(a),0);
+  const nRad=have>0?rads.reduce((s,a)=>s+radW(a)*radN(a,g),0)/have:num(g.expo,1.3);
+  const lab=t=>({unh:'locale non riscaldato',ground:'terreno',out:'esterno',heated:'locale riscaldato'})[t]||t;
+  const el=[{n:'Pareti esterne',A:wallA,U:Uw,t:Te,phi:pWall},{n:'Finestre',A:winF,U:Uv,t:Te,phi:Uv*winF*dTe},{n:'Portefinestre',A:winP,U:Up,t:Te,phi:Up*winP*dTe},
+    {n:'Pavimento verso '+lab(r.floorTo),A,U:Uf,t:Tf,phi:pFloor},{n:'Soffitto verso '+lab(r.ceilTo),A,U:Uc,t:Tc,phi:pCeil},
+    {n:'Pareti verso vani non riscaldati',A:num(r.otherArea),U:Uo,t:Ts,phi:pOther}].filter(x=>x.A>0&&x.U>0);
+  return {Ti,A,V,H,dTe,wallA,win,winF,winP,pWall,pWin,pFloor,pCeil,pOther,pT,pV,pR,tot,wm2:A>0?tot/A:0,have,nRad,
+    Vinf,Vmin,Vi,nMin,nEff:V>0?Vi/V:0,ownAch:own,el,Tf,Tc,Ts,e};
 }
-function phi50(phi,Tmean,Ti,n){const d=Tmean-Ti;return d<=0?Infinity:phi/Math.pow(d/50,n)}
+// ---- radiatori, UNI EN 442-2: resa = Φ50·(ΔTln/50)^n, con ΔTln differenza di temperatura logaritmica ----
+function lmtd(tf,tr,ti){const a=tf-ti,b=Math.max(tr-ti,0.05);if(a<=0.05)return 0;if(Math.abs(a-b)<1e-6)return a;return (a-b)/Math.log(a/b)}
+function radFac(tf,tr,ti,n){return Math.pow(lmtd(tf,tr,ti)/50,n)}
+// mandata che serve per avere una certa ΔTln con il salto dT (mandata − ritorno)
+function solveTf(req,dT,ti){if(!(req>0))return ti;let lo=ti+dT+0.05,hi=ti+dT+400;for(let i=0;i<60;i++){const m=(lo+hi)/2;if(lmtd(m,m-dT,ti)<req)lo=m;else hi=m}return (lo+hi)/2}
+// ritorno che serve con una mandata data (null se non basta nemmeno con il ritorno uguale alla mandata)
+function solveTr(req,tf,ti){if(lmtd(tf,tf-0.01,ti)<req)return null;let lo=ti+0.05,hi=tf-0.01;for(let i=0;i<60;i++){const m=(lo+hi)/2;if(lmtd(tf,m,ti)<req)lo=m;else hi=m}return (lo+hi)/2}
+function phi50(phi,tf,tr,ti,n){const f=radFac(tf,tr,ti,n);return f>0?phi/f:Infinity}
 function pipeFor(Q,vmax){
   for(const [name,di] of PIPES){const a=Math.PI*Math.pow(di/1000,2)/4,v=Q/3.6e6/a;if(v<=vmax)return {name,di,v}}
   const [name,di]=PIPES[PIPES.length-1];const a=Math.PI*Math.pow(di/1000,2)/4;return {name,di,v:Q/3.6e6/a}}
@@ -206,44 +265,44 @@ function equiv(w){ // equivalenti indicativi di una potenza a ΔT50
   if(!isFinite(w)||w<=0)return '—';
   return `alluminio h600: ${Math.ceil(w/ALU[600])} el. · tubolare 6 col h600: ${Math.ceil(w/tubEl(6,600))} el. · piastra 22 H600: ${Math.ceil(w/ACC_M['22']*10)*100} mm`}
 function sysCalc(S){
-  const g=S.g,n=num(g.expo,1.3);
+  const g=S.g,nG=num(g.expo,1.3),norma=g.mode!=='tarato';
   const Tm=num(g.Tm),Tr=num(g.Tr),dTw=Math.max(1,Tm-Tr),Tmean=(Tm+Tr)/2,TfMax=num(g.TfMax,70);
   const rooms=S.rooms.map(r=>({r,c:roomCalc(r,g)}));
-  // taratura sul funzionamento reale (facoltativa): in un giorno con Te nota bastava la mandata calTf
-  let k=1,cal=null;
+  // taratura sul funzionamento reale: a norma NON si applica (resta come verifica); nel calcolo «tarato» moltiplica i carichi
+  let kCal=null,cal=null;
   const kFix=num(g.kFix); // taratura da una lettura della caldaia: ha la precedenza
   const hasCal=!(kFix>0)&&g.calTe!==''&&g.calTe!=null&&g.calTf!==''&&g.calTf!=null&&isFinite(parseFloat(g.calTe))&&isFinite(parseFloat(g.calTf));
-  if(kFix>0){k=kFix;cal={k,fixed:true};
-    rooms.forEach(x=>{for(const p of ['pWall','pWin','pFloor','pCeil','pOther','pT','pV','pR','tot','wm2'])x.c[p]*=k});}
+  if(kFix>0){kCal=kFix;cal={k:kFix,fixed:true}}
   if(hasCal){
     let model=0,rad=0;
     const hasTr=g.calTr!==''&&g.calTr!=null&&isFinite(parseFloat(g.calTr));
     const calDtw=hasTr?Math.max(1,num(g.calTf)-num(g.calTr)):dTw; // salto di quel giorno se noto, altrimenti quello di progetto
-    // quel giorno la casa era a regime: i radiatori coprivano la dispersione di tutto il piano (senza la maggiorazione di ripresa,
-    // che è un margine di progetto), come nella taratura da una lettura della caldaia
+    // quel giorno la casa era a regime: i radiatori coprivano la dispersione di tutto il piano (senza la ripresa, che è un margine di progetto)
     for(const x of rooms){const cc=roomCalc(x.r,Object.assign({},g,{Te:num(g.calTe)}));model+=cc.pT+cc.pV;
-      if(x.c.have>0)rad+=x.c.have*Math.pow(Math.max(num(g.calTf)-calDtw/2-x.c.Ti,0)/50,n);}
-    if(model>0&&rad>0){k=rad/model;cal={k,model,rad};
-      rooms.forEach(x=>{for(const p of ['pWall','pWin','pFloor','pCeil','pOther','pT','pV','pR','tot','wm2'])x.c[p]*=k});}
+      if(x.c.have>0)rad+=x.c.have*radFac(num(g.calTf),num(g.calTf)-calDtw,x.c.Ti,x.c.nRad);}
+    if(model>0&&rad>0){kCal=rad/model;cal={k:kCal,model,rad}}
   }
+  const k=(!norma&&kCal)?kCal:1;
+  if(k!==1)rooms.forEach(x=>{for(const p of ['pWall','pWin','pFloor','pCeil','pOther','pT','pV','pR','tot','wm2'])x.c[p]*=k;x.c.el.forEach(e=>e.phi*=k)});
   const tot=rooms.reduce((s,x)=>s+x.c.tot,0), area=rooms.reduce((s,x)=>s+x.c.A,0);
   const boilerW=tot*(1+num(g.marg)/100);
   const Qtot=tot*0.86/dTw;
   rooms.forEach(x=>{
-    const c=x.c;
-    c.scen=SCEN.concat([[Tm,Tr]]).map(([m,r])=>phi50(c.tot,(m+r)/2,c.Ti,n)); // l'ultimo = tua mandata/ritorno
-    c.cur=phi50(c.tot,Tmean,c.Ti,n);
+    const c=x.c,n=c.nRad;c.n=n;
+    c.scen=SCEN.concat([[Tm,Tr]]).map(([m,rr])=>phi50(c.tot,m,rr,c.Ti,n)); // l'ultimo = tua mandata/ritorno
+    c.cur=phi50(c.tot,Tm,Tr,c.Ti,n);
     c.Q=c.tot*0.86/dTw;
-    const facD=Math.pow(Math.max(Tmean-c.Ti,1e-6)/50,n), facM=Math.pow(Math.max(TfMax-dTw/2-c.Ti,1e-6)/50,n);
+    const facD=radFac(Tm,Tr,c.Ti,n), facM=radFac(TfMax,TfMax-dTw,c.Ti,n);
     c.facD=facD;c.facM=facM;
     if(c.have>0){
       c.avail=c.have*facD;c.availMax=c.have*facM;
-      c.ratio=c.tot/c.have;c.dTmNeed=50*Math.pow(c.ratio,1/n);c.TmNeed=c.Ti+c.dTmNeed;c.TfNeed=c.TmNeed+dTw/2;
+      c.ratio=c.tot/c.have;c.dTmNeed=50*Math.pow(c.ratio,1/n); // ΔTln che serve (UNI EN 442-2)
+      c.TfNeed=solveTf(c.dTmNeed,dTw,c.Ti);c.TmNeed=c.TfNeed-dTw/2;
       c.ok=c.avail>=c.tot;c.okMax=c.availMax>=c.tot;c.over=c.TfNeed>TfMax;
-      c.extraD=Math.max(0,c.tot-c.avail)/facD;c.extraM=Math.max(0,c.tot-c.availMax)/facM;
+      c.extraD=facD>0?Math.max(0,c.tot-c.avail)/facD:Infinity;c.extraM=facM>0?Math.max(0,c.tot-c.availMax)/facM:Infinity;
     }else{
-      c.avail=0;c.availMax=0;c.dTmNeed=Tmean-c.Ti;c.TmNeed=Tmean;c.TfNeed=Tm;c.ok=null;c.okMax=null;c.over=false;
-      c.extraD=c.tot/facD;c.extraM=c.tot/facM;
+      c.avail=0;c.availMax=0;c.dTmNeed=lmtd(Tm,Tr,c.Ti);c.TmNeed=Tmean;c.TfNeed=Tm;c.ok=null;c.okMax=null;c.over=false;
+      c.extraD=facD>0?c.tot/facD:Infinity;c.extraM=facM>0?c.tot/facM:Infinity;
     }
   });
   const dTc=num(g.dTp,10)||dTw; // salto che imposto sul circolatore (par. 34): vale per curva e consigli
@@ -251,26 +310,28 @@ function sysCalc(S){
   const par=new Map();rooms.forEach(x=>par.set(x.r.id,x.r.id));
   const fnd=i=>{while(par.get(i)!==i)i=par.get(i);return i};
   rooms.forEach(x=>{const o=Number(x.r.comm);if(x.r.comm!==''&&x.r.comm!=null&&par.has(o)&&o!==x.r.id){const a=fnd(x.r.id),b=fnd(o);if(a!==b)par.set(a,b)}});
-  const bucket=new Map();rooms.forEach(x=>{const k=fnd(x.r.id);if(!bucket.has(k))bucket.set(k,[]);bucket.get(k).push(x)});
+  const bucket=new Map();rooms.forEach(x=>{const kk=fnd(x.r.id);if(!bucket.has(kk))bucket.set(kk,[]);bucket.get(kk).push(x)});
   const zones=[],done=new Set();
-  rooms.forEach(x=>{const k=fnd(x.r.id);if(done.has(k))return;done.add(k);const m=bucket.get(k);
+  rooms.forEach(x=>{const kk=fnd(x.r.id);if(done.has(kk))return;done.add(kk);const m=bucket.get(kk);
     if(m.length===1){zones.push(x);return}
     const sum=f=>m.reduce((s,y)=>s+f(y.c),0);
     const tot=sum(c=>c.tot),have=sum(c=>c.have),avail=sum(c=>c.avail),availMax=sum(c=>c.availMax);
     const Ti=tot>0?sum(c=>c.tot*c.Ti)/tot:sum(c=>c.Ti)/m.length;
-    const facD=Math.pow(Math.max(Tmean-Ti,1e-6)/50,n),facM=Math.pow(Math.max(TfMax-dTw/2-Ti,1e-6)/50,n);
-    const c={tot,have,avail,availMax,Ti,facD,facM,A:sum(c=>c.A),Q:sum(c=>c.Q),cur:sum(c=>c.cur),scen:m[0].c.scen.map((_,i)=>m.reduce((s,y)=>s+y.c.scen[i],0))};
-    if(have>0){c.ratio=tot/have;c.dTmNeed=50*Math.pow(c.ratio,1/n);c.TmNeed=Ti+c.dTmNeed;c.TfNeed=c.TmNeed+dTw/2;
-      c.ok=avail>=tot;c.okMax=availMax>=tot;c.over=c.TfNeed>TfMax;c.extraD=Math.max(0,tot-avail)/facD;c.extraM=Math.max(0,tot-availMax)/facM}
-    else{c.dTmNeed=Tmean-Ti;c.TmNeed=Tmean;c.TfNeed=Tm;c.ok=null;c.okMax=null;c.over=false;c.extraD=tot/facD;c.extraM=tot/facM}
+    const n=have>0?sum(c=>c.have*c.n)/have:nG;
+    const facD=radFac(Tm,Tr,Ti,n),facM=radFac(TfMax,TfMax-dTw,Ti,n);
+    const c={tot,have,avail,availMax,Ti,n,facD,facM,A:sum(c=>c.A),Q:sum(c=>c.Q),cur:sum(c=>c.cur),scen:m[0].c.scen.map((_,i)=>m.reduce((s,y)=>s+y.c.scen[i],0))};
+    if(have>0){c.ratio=tot/have;c.dTmNeed=50*Math.pow(c.ratio,1/n);c.TfNeed=solveTf(c.dTmNeed,dTw,Ti);c.TmNeed=c.TfNeed-dTw/2;
+      c.ok=avail>=tot;c.okMax=availMax>=tot;c.over=c.TfNeed>TfMax;c.extraD=facD>0?Math.max(0,tot-avail)/facD:Infinity;c.extraM=facM>0?Math.max(0,tot-availMax)/facM:Infinity}
+    else{c.dTmNeed=lmtd(Tm,Tr,Ti);c.TmNeed=Tmean;c.TfNeed=Tm;c.ok=null;c.okMax=null;c.over=false;c.extraD=facD>0?tot/facD:Infinity;c.extraM=facM>0?tot/facM:Infinity}
     zones.push({r:{id:'z'+m.map(y=>y.r.id).join('-'),name:m.map(y=>y.r.name||'Stanza').join(' + '),rads:m.flatMap(y=>y.r.rads||[])},c,rooms:m,grouped:true})});
+  // curva: mandata che serve al variare della temperatura esterna (carico proporzionale a θint − θe)
   const Ted=num(g.Te),curve=[];
   for(let Te=15;Te>=Math.min(Ted,-15);Te-=1){
     let f=-Infinity;
     for(const x of zones){
       const Ti=x.c.Ti;if(Te>=Ti){f=Math.max(f,Ti);continue}
       const kk=(Ti-Ted)<=0?0:(Ti-Te)/(Ti-Ted);
-      f=Math.max(f,Ti+x.c.dTmNeed*Math.pow(Math.max(kk,0),1/n)+dTc/2);
+      f=Math.max(f,solveTf(x.c.dTmNeed*Math.pow(Math.max(kk,0),1/(x.c.n||nG)),dTc,Ti));
     }
     if(isFinite(f))curve.push([Te,f]);
   }
@@ -285,26 +346,28 @@ function sysCalc(S){
   const Vstd=VESSELS.find(v=>v>=Vn)||null;
   const mainPipe=pipeFor(Qtot,1.0);
   const Hm=((num(g.Lcirc,40)*150*1.3)+10000)/9810;
-  return {rooms,zones,tot,area,boilerW,kW,Qtot,dTw,dTc,Tmean,TfMax,curve,worst,withRad,Vimp,Vrad,e,Pf,Vn,Vstd,mainPipe,Hm,n,k,cal,wm2:area>0?tot/area:0};
+  return {rooms,zones,tot,area,boilerW,kW,Qtot,dTw,dTc,Tmean,TfMax,curve,worst,withRad,Vimp,Vrad,e,Pf,Vn,Vstd,mainPipe,Hm,n:nG,k,kCal,cal,norma,wm2:area>0?tot/area:0};
 }
 // piano con ritorno massimo (per far condensare): sceglie il salto del circolatore (par. 34) e la mandata
 // in modo che il ritorno non superi TrMax e i radiatori bastano; le stanze troppo difficili restano fuori e si dicono
 function condPlan(S,R){
-  const g=S.g,TrMax=num(g.TrMax,55),TfMax=num(g.TfMax,70),n=num(g.expo,1.3);
-  const zs=R.zones.filter(z=>z.c.have>0&&z.c.tot>50).sort((a,b)=>b.c.TmNeed-a.c.TmNeed);
+  const g=S.g,TrMax=num(g.TrMax,55),TfMax=num(g.TfMax,70);
+  const need=(z,d)=>solveTf(z.c.dTmNeed,d,z.c.Ti);
+  const zs=R.zones.filter(z=>z.c.have>0&&z.c.tot>50).sort((a,b)=>need(b,10)-need(a,10));
   if(!zs.length)return null;
+  const zAvail=(z,tf,tr)=>(z.rooms||[z]).reduce((s,y)=>s+y.c.have*radFac(tf,tr,y.c.Ti,y.c.n),0);
   for(let k=0;k<zs.length;k++){
-    const M=zs[k].c.TmNeed; // temperatura media dell'acqua che serve alla stanza più esigente rimasta
-    const dT=[5,10,15,20].find(d=>d>=2*(M-TrMax)-1e-9&&M+d/2<=TfMax+1e-9);
+    const inc=zs.slice(k),reqTf=d=>Math.max(...inc.map(z=>need(z,d)));
+    const dT=[5,10,15,20].find(d=>{const f=reqTf(d);return f<=TfMax+1e-9&&f-d<=TrMax+1e-9});
     if(dT==null)continue;
-    const Tf=Math.min(TrMax+dT,Math.ceil(M+dT/2-1e-9)),Tr=Tf-dT;
+    const Tf=Math.min(TrMax+dT,Math.ceil(reqTf(dT)-1e-9)),Tr=Tf-dT;
     // la configurazione che rende di più nei limiti (serve per dire quanto manca alle stanze rimaste fuori)
-    const opt=[5,10,15,20].map(d=>{const f=Math.min(TfMax,TrMax+d);return {dT:d,Tf:f,Tr:f-d,mean:f-d/2}});
-    const cand=opt.filter(o=>o.mean>=M-1e-9); // deve bastare alle stanze incluse
-    // se qualche stanza resta fuori uso la configurazione che rende di più (le manca meno); altrimenti il salto più piccolo entro 1 K dal massimo
-    const bm=Math.max(...cand.map(o=>o.mean)),best=cand.find(o=>o.mean>=bm-(k>0?1e-9:1));
-    const excl=zs.slice(0,k).map(z=>({name:z.r.name,miss:Math.max(0,z.c.tot-z.c.have*Math.pow(Math.max(best.mean-z.c.Ti,0)/50,n))}));
-    return {dT,p34:DT_PAR34.indexOf(dT),Tf,Tr,best,p34best:DT_PAR34.indexOf(best.dT),ok:zs.slice(k).map(z=>z.r.name),excl,TrMax,TfMax}}
+    const opt=[5,10,15,20].map(d=>{const f=Math.min(TfMax,TrMax+d);return {dT:d,Tf:f,Tr:f-d,mean:f-d/2,fac:radFac(f,f-d,20,1.3)}});
+    const cand=opt.filter(o=>inc.every(z=>need(z,o.dT)<=o.Tf+1e-9)); // deve bastare alle stanze incluse
+    // se qualche stanza resta fuori uso la configurazione che rende di più; altrimenti il salto più piccolo entro il 3 % dal massimo
+    const bm=Math.max(...cand.map(o=>o.fac)),best=cand.find(o=>o.fac>=bm*(k>0?1-1e-9:0.97));
+    const excl=zs.slice(0,k).map(z=>({name:z.r.name,miss:Math.max(0,z.c.tot-zAvail(z,best.Tf,best.Tr))}));
+    return {dT,p34:DT_PAR34.indexOf(dT),Tf,Tr,best,p34best:DT_PAR34.indexOf(best.dT),ok:inc.map(z=>z.r.name),excl,TrMax,TfMax}}
   return {fail:true,TrMax,TfMax,names:zs.map(z=>z.r.name)}}
 // soluzioni per una stanza che non basta: radiatori da aggiungere + modi di ridurre il carico
 function solutions(S,x,R){
@@ -316,29 +379,27 @@ function solutions(S,x,R){
   return {opts,allAfter,allOkD:Z.have>0&&allAfter<=Z.avail,allOkM:Z.have>0&&allAfter<=Z.availMax,extraD:Z.extraD,extraM:Z.extraM}}
 // Z = zona di cui la stanza fa parte (una stanza sola oppure stanze comunicanti): l'esito si valuta sul totale della zona
 function solRoom(S,x,R,Z){
-  const g=S.g,r=x.r,c=x.c,k=R.k||1;
-  const P=EPOCHE[g.epoca]||EPOCHE.nonso;
+  const g=S.g,r=x.r,c=x.c,k=R.k||1,E=envU(g);
   const tot0=c.tot;
   const calc=(gm,rm)=>roomCalc(rm,gm).tot*k;
   const withR=o=>calc(g,Object.assign({},r,o));
   const opts=[];
   const add=(id,label,after,note)=>{const dW=tot0-after;if(dW>=15){const rest=Z.tot-dW;opts.push({id,label,dW,after:rest,note:note||'',okD:Z.have>0&&rest<=Z.avail,okM:Z.have>0&&rest<=Z.availMax})}};
-  const Uv=num(r.winU)>0?num(r.winU):P.win, Up=num(r.pfU)>0?num(r.pfU):Uv;
-  const Uw=num(r.wallU)>0?num(r.wallU):P.wall;
-  const Uf=num(r.floorU)>0?num(r.floorU):P.slab, Uc=num(r.ceilU)>0?num(r.ceilU):(r.ceilTo==='out'?P.roof:P.slab);
-  const ach=(r.ach===''||r.ach==null)?P.ach:num(r.ach,P.ach);
+  const Uv=num(r.winU)>0?num(r.winU):E.win.U, Up=num(r.pfU)>0?num(r.pfU):Uv;
+  const Uw=num(r.wallU)>0?num(r.wallU):E.wall.U;
+  const Uf=num(r.floorU)>0?num(r.floorU):E.floor.U, Uc=num(r.ceilU)>0?num(r.ceilU):(r.ceilTo==='out'?E.roof.U:E.ceil.U);
   const comb={},gComb=Object.assign({},g);
   if((c.winF>0&&Uv>1.45)||(c.winP>0&&Up>1.45)){
     const nm=c.winF>0&&c.winP>0?'Finestre e portefinestre nuove':c.winP>0?'Portefinestre nuove':'Finestre nuove';
     add('win',`${nm} con U 1,4 (ora circa ${r1(c.winP>0&&c.winF<=0?Up:Uv)})`,withR({winU:1.4,pfU:1.4}));comb.winU=1.4;comb.pfU=1.4}
-  if(ach>0.5){add('ach',`Meno spifferi: ricambi d'aria 0,5 volumi/ora (ora ${r1(ach)})`,withR({ach:0.5}));comb.ach=0.5}
+  if(c.ownAch?c.nEff>c.nMin+0.05:c.Vinf>c.Vmin*1.05){add('ach',`Infissi e cassonetti più ermetici: aria da ${r1(c.nEff)} a ${r1(c.nMin)} ricambi all'ora (il minimo per questa stanza)`,withR({ach:c.nMin}));comb.ach=c.nMin}
   if(r.ext!=='0'&&Uw>0.6){add('wall',`Isolare la parete esterna (cappotto: U 0,3 invece di ${r1(Uw)})`,withR({wallU:0.3}));comb.wallU=0.3}
   const sl={};
   if(r.floorTo==='unh'&&Uf>0.6)sl.floorU=0.45;
   if(r.ceilTo==='unh'&&Uc>0.6)sl.ceilU=0.45;
   if(Object.keys(sl).length){add('slab','Isolare il solaio sopra e/o sotto (U 0,45)',withR(sl));Object.assign(comb,sl)}
   if(num(g.rip)>0){add('rip','Riscaldamento sempre acceso, senza maggiorazione di ripresa',calc(Object.assign({},g,{rip:0}),r),'solo se lo tieni acceso di continuo');gComb.rip=0}
-  if(r.floorTo==='unh'||r.ceilTo==='unh'){
+  if((r.floorTo==='unh'&&g.dnType==='nota')||(r.ceilTo==='unh'&&g.upType==='nota')){
     const tb=num(g.TuBelow),ta=num(g.TuAbove);
     add('tu',`Se i piani sopra/sotto restano a ${r1(tb+3)}/${r1(ta+3)} °C invece di ${r1(tb)}/${r1(ta)} (scale aperte, un po' di calore che sale o scende)`,calc(Object.assign({},g,{TuBelow:tb+3,TuAbove:ta+3}),r),'da verificare misurando la temperatura di quei piani');
   }
@@ -425,7 +486,8 @@ function checks(S,R){
   else if(Math.abs((num(g.Tm)-num(g.Tr))-num(g.dTp,10))>2)out.push({cls:'warn',txt:`Mandata e ritorno di progetto (${num(g.Tm)}/${num(g.Tr)}, salto ${num(g.Tm)-num(g.Tr)} K) non corrispondono al salto impostato sul circolatore (${num(g.dTp,10)} K, par. 34): portata, curva e parametri consigliati usano il salto del circolatore. Rendili uguali (il pulsante «Usa … nei calcoli» nella Risposta lo fa da solo).`});
   if(num(g.Tr)>num(g.TrMax,55))out.push({cls:'warn',txt:`Il ritorno di progetto (${num(g.Tr)} °C) supera il massimo per condensare (${num(g.TrMax,55)} °C): la caldaia non condensa. Vedi «Per condensare» nella Risposta.`});
   if(num(g.Tm)>num(g.TfMax,70))out.push({cls:'warn',txt:`La mandata di progetto (${num(g.Tm)} °C) supera il limite di ${num(g.TfMax,70)} °C.`});
-  if(R.k<0.4||R.k>1.5)out.push({cls:'warn',txt:`La taratura cambia il carico di ×${r1(R.k)}: valore insolito, ricontrolla i dati della taratura.`});
+  if(!R.norma&&(R.k<0.4||R.k>1.5))out.push({cls:'warn',txt:`La taratura cambia il carico di ×${r1(R.k)}: valore insolito, ricontrolla i dati della taratura.`});
+  if(R.norma&&R.kCal)out.push({cls:R.kCal<0.8||R.kCal>1.25?'warn':'note',txt:`Verifica col funzionamento reale: ${R.cal.fixed?'la lettura della caldaia':'il giorno che ricordi'} corrisponde a un carico pari al ${Math.round(R.kCal*100)} % di quello calcolato a norma. ${R.kCal<0.8?'Il calcolo a norma è più severo della realtà ricordata: verifica i dati della casa (muri, finestre, locali sopra e sotto) e il ricordo.':R.kCal>1.25?'La casa reale disperde più del calcolo: mancano stanze o i dati sono ottimisti.':'Calcolo e realtà sono vicini.'}`});
   const sl=(S.cald&&S.cald.letture)||[];
   if(sl.some(l=>has(l.Tm)&&has(l.Tr)&&!has(l.Te)))out.push({cls:'note',txt:'Alcune letture non hanno la temperatura esterna: non servono per tarare il carico.'});
   return out}
@@ -436,7 +498,7 @@ function otcFit(S,dTw,tmin){
   const TfMax=Math.min(num(g.TfMax,70),num(g.TrMax,55)+dTw); // tetto: limite dei tubi e ritorno massimo per condensare
   if(!R.rooms.length)return null;
   const need=Te=>{let f=-Infinity;for(const x of R.zones){const Ti=x.c.Ti;if(Te>=Ti){f=Math.max(f,Ti);continue}
-    const kk=(Ti-Ted)<=0?0:(Ti-Te)/(Ti-Ted);f=Math.max(f,Ti+x.c.dTmNeed*Math.pow(Math.max(kk,0),1/n)+dTw/2)}return f};
+    const kk=(Ti-Ted)<=0?0:(Ti-Te)/(Ti-Ted);f=Math.max(f,solveTf(x.c.dTmNeed*Math.pow(Math.max(kk,0),1/(x.c.n||n)),dTw,Ti))}return f};
   // (dTw = salto del circolatore passato dal chiamante)
   const tg={};for(let Te=Math.round(Ted);Te<=15;Te++)tg[Te]=Math.min(need(Te)+2,TfMax);
   let best=null;
@@ -466,7 +528,7 @@ function consigli(l,cald,S){
 
 /* ---------- stato ---------- */
 const KEY='riscaldamento-villetta-v2';
-const defG=()=>({Te:-5,epoca:'nonso',H:2.7,TuAbove:12,TuBelow:12,TuSide:10,tb:10,rip:10,marg:5,Tm:55,Tr:45,expo:1.3,Tmax:80,Pi:1.0,Psv:3.0,Vkw:11,Vover:'',Lcirc:40,TfMax:70,TrMax:55,calTe:'',calTf:'',calTr:'',kFix:'',dTp:10,scIdx:1});
+const defG=()=>({mode:'norma',wallType:'',wallLay:[{m:'intonaco',s:1.5},{m:'forato',s:12},{m:'aria',s:6},{m:'forato',s:8},{m:'intonaco',s:1.5}],winType:'',ceilType:'',floorType:'',ceilUg:'',floorUg:'',upType:'p2f',dnType:'p2f',sdType:'nota',esp:'normale',n50:'',dUtb:0.10,Te:-5,epoca:'nonso',H:2.7,TuAbove:12,TuBelow:12,TuSide:10,tb:10,rip:10,marg:5,Tm:55,Tr:45,expo:1.3,Tmax:80,Pi:1.0,Psv:3.0,Vkw:11,Vover:'',Lcirc:40,TfMax:70,TrMax:55,calTe:'',calTf:'',calTr:'',kFix:'',dTp:10,scIdx:1});
 const defCald=()=>({par:{p02:'',p04:'',p05:'',p06:'',p33:'',p34:'',p35:'',inerzia:'',setMin:'',setMax:'',sondaAmb:'',modAmb:'',sondaEst:'',curva:'',offset:'',isteresi:''},letture:[]});
 let lid=1;
 let uid=1,rid=1;
@@ -481,7 +543,7 @@ const example=()=>({g:defG(),rooms:[
 let S;
 try{const raw=localStorage.getItem(KEY);S=raw?JSON.parse(raw):example()}catch(e){S=example()}
 if(!S||!S.g||!Array.isArray(S.rooms))S=example();
-function normalize(){S.g=Object.assign(defG(),S.g);S.rooms.forEach(r=>{if(!Array.isArray(r.rads))r.rads=[];if(r.nPF==null)r.nPF=0;if(!(r.pfSize>0))r.pfSize=2.6;if(r.pfArea==null)r.pfArea='';if(r.pfU==null)r.pfU='';if(r.comm==null)r.comm=''});
+function normalize(){S.g=Object.assign(defG(),S.g);if(!Array.isArray(S.g.wallLay))S.g.wallLay=defG().wallLay;S.rooms.forEach(r=>{if(!Array.isArray(r.rads))r.rads=[];if(r.nPF==null)r.nPF=0;if(!(r.pfSize>0))r.pfSize=2.6;if(r.pfArea==null)r.pfArea='';if(r.pfU==null)r.pfU='';if(r.comm==null)r.comm=''});
   S.cald=Object.assign(defCald(),S.cald||{});S.cald.par=Object.assign(defCald().par,S.cald.par||{});if(!Array.isArray(S.cald.letture))S.cald.letture=[];
   lid=Math.max(0,...S.cald.letture.map(l=>l.id||0))+1;if(!S.view)S.view='calc';
   S.posto=Object.assign({cfg:'A',done:{},ck:{Te:'',setM:''}},S.posto||{});S.posto.done=S.posto.done||{};S.posto.ck=Object.assign({Te:'',setM:''},S.posto.ck||{});
@@ -490,7 +552,7 @@ normalize();
 const save=()=>{try{localStorage.setItem(KEY,JSON.stringify(S))}catch(e){}};
 
 /* ---------- editor ---------- */
-const G_FIELDS=[['H','Altezza delle stanze senza altezza scritta (m)',0.05],['TuBelow','Temp. piano sotto non riscaldato (°C)',1],['TuAbove','Temp. piano sopra non riscaldato (°C)',1],['TuSide','Temp. vani laterali non riscaldati (°C)',1],['tb','Ponti termici (%)',1],['rip','Maggiorazione ripresa (%)',1],['marg','Margine distribuzione/caldaia (%)',1],['expo','Esponente radiatori n',0.05],['Tmax','Temp. max acqua (°C)',1],['Pi','Precarica vaso (bar)',0.1],['Psv','Taratura valvola sicurezza (bar)',0.5],['Vkw','Acqua impianto (L per kW)',1],['Vover','Volume impianto, se noto (L)',1],['Lcirc','Lunghezza circuito più lungo A+R (m)',1],['calTe','Taratura: esterna di un giorno reale (°C)',1],['calTf','Taratura: mandata che bastava (°C)',1],['calTr','Taratura: ritorno di quel giorno (°C)',1]];
+const G_FIELDS=[['H','Altezza delle stanze senza altezza scritta (m)',0.05],['TuBelow','Temp. nota del piano sotto (°C), se scegli «temperatura nota»',1],['TuAbove','Temp. nota del piano sopra (°C)',1],['TuSide','Temp. nota dei vani laterali (°C)',1],['rip','Maggiorazione ripresa (%)',1],['marg','Margine distribuzione/caldaia (%)',1],['expo','Esponente radiatori n (se manca il modello)',0.01],['Tmax','Temp. max acqua (°C)',1],['Pi','Precarica vaso (bar)',0.1],['Psv','Taratura valvola sicurezza (bar)',0.5],['Vkw','Acqua impianto (L per kW)',1],['Vover','Volume impianto, se noto (L)',1],['Lcirc','Lunghezza circuito più lungo A+R (m)',1],['calTe','Taratura: esterna di un giorno reale (°C)',1],['calTf','Taratura: mandata che bastava (°C)',1],['calTr','Taratura: ritorno di quel giorno (°C)',1]];
 const optsS=(list,val)=>list.map(([v,t])=>`<option value="${v}"${String(v)===String(val)?' selected':''}>${t}</option>`).join('');
 const fld=(label,key,val,step,attr='data-k')=>`<label>${label}<input type="number" step="${step||'any'}" ${attr}="${key}" value="${val??''}"></label>`;
 function renderG(){
@@ -499,6 +561,8 @@ function renderG(){
   document.getElementById('comune').innerHTML=COMUNI.map(([n,t])=>`<option value="${t}"${t!==''&&t===S.g.Te?' selected':''}>${n}${t!==''?' ('+t+' °C)':''}</option>`).join('');
   document.querySelectorAll('input[data-g="Te"],input[data-g="Tm"],input[data-g="Tr"],input[data-g="TfMax"],input[data-g="TrMax"]').forEach(i=>i.value=S.g[i.dataset.g]);
   const sp=document.querySelector('select[data-g="dTp"]');if(sp)sp.value=String(S.g.dTp);
+  const md=document.querySelector('select[data-g="mode"]');if(md)md.value=S.g.mode==='tarato'?'tarato':'norma';
+  renderStr();
 }
 function radHTML(a){
   const H=[350,500,600,700,800];
@@ -548,6 +612,28 @@ function setComm(r,v){
   const old=S.rooms.find(x=>x.id==r.comm);if(old&&old.comm==r.id)old.comm='';
   r.comm=v===''?'':parseInt(v);
   const nw=S.rooms.find(x=>x.id==r.comm);if(nw&&(nw.comm===''||nw.comm==null))nw.comm=r.id}
+// scheda 2: strutture della casa e locali non riscaldati vicini (dati per il calcolo a norma)
+function renderStr(){const g=S.g,E=envU(g),P=EPOCHE[g.epoca]||EPOCHE.nonso,el=document.getElementById('strCard');if(!el)return;
+  const ent=(obj,f)=>Object.entries(obj).map(([k,v])=>[k,f(v)]);
+  const bu=v=>v.n+(v.b!=null?` (b ${r1(v.b)})`:'');
+  const lay=g.wallType==='strat'?`<div class="wide"><div class="tw"><table style="font-size:13px"><tr><th>Strato, da dentro a fuori</th><th>cm</th><th></th></tr>${(g.wallLay||[]).map((l,i)=>`<tr><td style="white-space:normal;text-align:left"><select data-lay="${i}" data-lf="m">${optsS(ent(MAT,v=>v.n),l.m)}</select></td><td><input type="number" step="0.5" data-lay="${i}" data-lf="s" value="${l.s??''}" style="width:72px"></td><td><button class="x" data-dellay="${i}">×</button></td></tr>`).join('')}</table></div>
+    <div class="row" style="margin-top:6px"><button class="x" data-addlay="1">+ Strato</button><span class="note">U = <b id="strU">${r1(strataU(g.wallLay))}</b> W/m²K (UNI EN ISO 6946, Rsi 0,13 e Rse 0,04)</span></div></div>`:'';
+  const slab=(key,own,lab)=>`<label class="wide">${lab}<select data-g="${key}">${optsS([['',`come l'epoca (U ${r1(P.slab)})`],...ent(SOLAI,v=>`${v.n} (U ${r1(key==='ceilType'?v.Uup:v.Udn)})`),['U','U scritta da me']],g[key])}</select></label>${g[key]==='U'?`<label>U (W/m²K)<input type="number" step="0.05" data-g="${own}" value="${g[own]??''}"></label>`:''}`;
+  el.innerHTML=`<h2>2. Strutture e locali vicini</h2>
+  <div class="grid">
+   <label class="wide">Muro esterno<select data-g="wallType">${optsS([['',`come l'epoca (U ${r1(P.wall)})`],...ent(MURI,v=>`${v.n} (U ${r1(v.U)})`),['strat','la mia stratigrafia']],g.wallType)}</select></label>
+   ${lay}
+   <label class="wide">Finestre e portefinestre<select data-g="winType">${optsS([['',`come l'epoca (U ${r1(P.win)})`],...ent(FIN,v=>`${v.n} (U ${r1(v.U)})`)],g.winType)}</select></label>
+   ${slab('ceilType','ceilUg','Solaio verso il piano sopra')}
+   ${slab('floorType','floorUg','Solaio verso il piano sotto')}
+   <label class="wide">Sopra c'è<select data-g="upType">${optsS(ent(BU,bu),g.upType)}</select></label>
+   <label class="wide">Sotto c'è<select data-g="dnType">${optsS(ent(BU,bu),g.dnType)}</select></label>
+   <label class="wide">Vani laterali non riscaldati<select data-g="sdType">${optsS(ent(BU,bu),g.sdType)}</select></label>
+   <label class="wide">Esposizione al vento<select data-g="esp">${optsS(ent(ESP,v=>v.n),g.esp)}</select></label>
+   <label>Tenuta all'aria n50 (1/h)<input type="number" step="0.5" data-g="n50" value="${g.n50??''}" placeholder="${r1(N50[g.epoca]||7)} dall'epoca"></label>
+   <label>Ponti termici ΔU (W/m²K)<input type="number" step="0.01" data-g="dUtb" value="${g.dUtb??''}" placeholder="0,10"></label>
+  </div>
+  <p class="note" id="strNote">In uso: muro U ${r1(E.wall.U)} (${E.wall.src}); finestre U ${r1(E.win.U)}; solaio sopra U ${r1(E.ceil.U)}; solaio sotto U ${r1(E.floor.U)} W/m²K. I valori dell'elenco sono tipici: verificali sulla casa vera. Il fattore b dice quanto il locale accanto è freddo: 0 = come la stanza, 1 = come fuori. Per una stanza diversa dalle altre scrivi la U nei suoi «Dettagli».</p>`}
 function renderRooms(){document.getElementById('rooms').innerHTML=S.rooms.map(roomHTML).join('')||'<p class="note">Nessuna stanza: aggiungine una.</p>'}
 
 /* ---------- risultati ---------- */
@@ -565,7 +651,7 @@ function solHTML(R,S){
     else head=`i radiatori danno ${f0(c.avail)} W a ${f0(Tm)}/${f0(Tr)} e ${f0(c.availMax)} W alla mandata massima di ${f0(TfMax)} °C, contro ${f0(c.tot)} W richiesti: <span class="bad">non bastano nemmeno alla mandata massima</span> (servirebbero ${f0(c.TfNeed)} °C).`;
     const li=[];
     li.push(`<li><b>Più radiatore${x.grouped?' (in una qualsiasi delle stanze comunicanti)':''}:</b> ${c.have>0?'aggiungi o sostituisci con':'installa almeno'} <b>${c.have>0?'+':''}${f0(s.extraD)} W</b> (a ΔT50) per farcela a ${f0(Tm)}/${f0(Tr)} → ${equiv(s.extraD)}${s.extraM<=1?`; oppure nessun radiatore in più: basta alzare la mandata a circa ${f0(c.TfNeed)} °C`:(s.extraM<s.extraD-1?`; oppure <b>${c.have>0?'+':''}${f0(s.extraM)} W</b> se alzi la mandata a ${f0(TfMax)} °C → ${equiv(s.extraM)}`:'')}.</li>`);
-    if(c.have>0&&!c.ok){const trN=2*c.TmNeed-Tm;if(trN<Tm-3&&trN>Tr)li.push(`<li><b>Alzare il ritorno (senza aggiungere nulla):</b> con mandata ${f0(Tm)} °C la stanza basta se il ritorno sale a circa <b>${f0(trN)} °C</b> invece di ${f0(Tr)}: serve far passare più acqua (circolatore più veloce, detentori più aperti, impostazione del ritorno/ΔT della caldaia). Si perde un po' di condensazione sulle giornate più fredde.${trN>num(g.TrMax,55)?` <b class="warn">Attenzione: oltre il ritorno massimo di ${f0(num(g.TrMax,55))} °C la caldaia non condensa.</b>`:''}</li>`)}
+    if(c.have>0&&!c.ok){const trN=solveTr(c.dTmNeed,Tm,c.Ti);if(trN!=null&&trN<Tm-3&&trN>Tr)li.push(`<li><b>Alzare il ritorno (senza aggiungere nulla):</b> con mandata ${f0(Tm)} °C la stanza basta se il ritorno sale a circa <b>${f0(trN)} °C</b> invece di ${f0(Tr)}: serve far passare più acqua (circolatore più veloce, detentori più aperti, impostazione del ritorno/ΔT della caldaia). Si perde un po' di condensazione sulle giornate più fredde.${trN>num(g.TrMax,55)?` <b class="warn">Attenzione: oltre il ritorno massimo di ${f0(num(g.TrMax,55))} °C la caldaia non condensa.</b>`:''}</li>`)}
     if(s.opts.length)li.push(`<li><b>Ridurre il carico</b> (dal più efficace):<ul class="l">${s.opts.map(o=>`<li>${o.label}: <b>−${f0(o.dW)} W</b> (resta ${f0(o.after)} W)${o.okD?` <span class="ok">da solo basta a ${f0(Tm)}/${f0(Tr)}</span>`:(o.okM?' <span class="warn">basta solo con mandata alta</span>':'')}${o.note?` <span class="note">(${o.note})</span>`:''}</li>`).join('')}</ul></li>`);
     if(s.opts.length>1)li.push(`<li><b>Tutti gli interventi insieme</b> (esclusa la stanza più fredda): carico circa ${f0(s.allAfter)} W${c.have>0?(s.allOkD?` → <span class="ok">basta a ${f0(Tm)}/${f0(Tr)}</span>`:(s.allOkM?` → <span class="warn">basta solo con mandata alta</span>`:` → <span class="bad">non basta ancora</span>`)):''}.</li>`);
     li.push(`<li><b>Alternativa:</b> radiatore ventilato o ventilconvettore: a bassa temperatura rende molto di più di un radiatore normale (verifica la scheda del modello).</li>`);
@@ -616,7 +702,7 @@ function renderOut(){
   const crv=[15,10,5,0,-5,-10].filter(t=>t>=Math.min(num(g.Te),-10)-0.01).map(t=>{const p=R.curve.find(q=>q[0]===t);return p?`<tr><td>${t} °C</td><td>${p[1]>R.TfMax?`<b class="bad">${f0(p[1])} °C (oltre il limite)</b>`:`<b>${f0(p[1])} °C</b>`}</td></tr>`:''}).join('');
   const verdict=noRad?'inserisci i radiatori per sapere a che mandata bastano':(nOver?`${nOver} stanz${nOver>1?'e non bastano':'a non basta'} nemmeno alla mandata massima di ${f0(R.TfMax)} °C: vedi «Soluzioni»`:(nBad?`${nBad} stanz${nBad>1?'e bastano':'a basta'} solo con mandata più alta di ${f0(num(g.Tm))}/${f0(num(g.Tr))}, ma entro il limite`:`tutte le stanze con radiatori bastano a ${f0(num(g.Tm))}/${f0(num(g.Tr))}`));
   const sol=solHTML(R,S),repl=replHTML(R,S);
-  const calNote=R.cal?` Carico corretto con la taratura ${R.cal.fixed?'da una lettura della caldaia':'sul funzionamento reale'}: ×${(Math.round(R.k*100)/100).toString().replace('.',',')}${R.k>1.5||R.k<0.4?' (fattore insolito: ricontrolla i dati della taratura)':''}. ${R.cal.fixed?'Il fattore è fisso: se cambi misure o radiatori il carico cambia di conseguenza.':'Il carico totale resta ancorato a quel giorno: se cambi le misure di una stanza cambia soprattutto come si ripartisce tra le stanze.'}`:'';
+  const calNote=R.norma?` Calcolo a norma: carico UNI EN 12831-1, radiatori UNI EN 442-2${R.kCal?`; il funzionamento reale che ricordi corrisponde al ${Math.round(R.kCal*100)} % di questo carico (vedi «Controlli sui dati»)`:''}.`:R.cal?` Calcolo tarato: carico corretto con la taratura ${R.cal.fixed?'da una lettura della caldaia':'sul funzionamento reale'}: ×${(Math.round(R.k*100)/100).toString().replace('.',',')}${R.k>1.5||R.k<0.4?' (fattore insolito: ricontrolla i dati della taratura)':''}. ${R.cal.fixed?'Il fattore è fisso: se cambi misure o radiatori il carico cambia di conseguenza.':'Il carico totale resta ancorato a quel giorno: se cambi le misure di una stanza cambia soprattutto come si ripartisce tra le stanze.'}`:'';
   const warnCurve=R.curve.some(p=>p[1]>R.TfMax)?`<p class="note bad">Sotto i ${f0((R.curve.filter(p=>p[1]>R.TfMax).sort((a,b)=>b[0]-a[0])[0]||[0])[0])} °C esterni la casa non resta in temperatura con questi radiatori, perché servirebbe una mandata oltre il limite di ${f0(R.TfMax)} °C.</p>`:'';
   const chk=checks(S,R);
   const chkHTML=`<div class="card"><h2>Controlli sui dati</h2>${chk.length?'<ul class="l">'+chk.map(c=>`<li class="${c.cls}">${c.txt}</li>`).join('')+'</ul>':'<p class="ok">Dati coerenti: nessun problema trovato.</p>'}</div>`;
@@ -676,7 +762,7 @@ function lettOut(l){
   h+=`<p class="${d.cls}" style="margin:6px 0">${d.stato}</p>`;
   if(d.Q!=null)h+=`<p class="note">Stima a occhio (modulazione ${l.mod} %, supponendo che vada da 2,5 kW al massimo del par. 04 e un rendimento del ${f0(d.eta*100)} %): potenza ceduta circa <b>${f0(d.Q)} W</b>${d.flow!=null?`, portata circa <b>${f0(d.flow)} L/h</b>`:''}.</p>`;
   const kNow=sysCalc(S).k;
-  if(d.modelLoad!=null)h+=`<p class="note">Con ${l.Te} °C fuori il modello senza taratura dà ${f0(d.modelLoad)} W a regime per tutto il piano${Math.abs(kNow-1)>0.005?` (con la taratura attuale ×${kTxt(kNow)}: ${f0(d.modelLoad*kNow)} W)`:''}${d.kSug!=null?(d.kSug>=0.3&&d.kSug<=1.6?`; la caldaia ne stava dando circa il ${f0(d.kSug*100)} %. <button class="x" data-usek="${l.id}">Usa come taratura del carico (×${kTxt(d.kSug)})</button> Vale se in quel momento le stanze erano a temperatura e la caldaia a regime.`:`; la stima della potenza ceduta dà ${f0(d.kSug*100)} % del modello: non torna, quindi non la uso per tarare. Controlla la modulazione letta, il par. 04 e che fosse a regime.`):'.'}</p>`;
+  if(d.modelLoad!=null)h+=`<p class="note">Con ${l.Te} °C fuori il modello senza taratura dà ${f0(d.modelLoad)} W a regime per tutto il piano${Math.abs(kNow-1)>0.005?` (con la taratura attuale ×${kTxt(kNow)}: ${f0(d.modelLoad*kNow)} W)`:''}${d.kSug!=null?(d.kSug>=0.3&&d.kSug<=1.6?`; la caldaia ne stava dando circa il ${f0(d.kSug*100)} %. <button class="x" data-usek="${l.id}">Usa come taratura del carico (×${kTxt(d.kSug)})</button>${S.g.mode==='tarato'?'':' (si applica scegliendo «calcolo tarato» nella scheda Calcolo)'} Vale se in quel momento le stanze erano a temperatura e la caldaia a regime.`:`; la stima della potenza ceduta dà ${f0(d.kSug*100)} % del modello: non torna, quindi non la uso per tarare. Controlla la modulazione letta, il par. 04 e che fosse a regime.`):'.'}</p>`;
   h+=`<div class="row" style="margin-top:6px"><button class="x" data-usemr="${l.id}">Usa ${f0(l.Tm)}/${f0(l.Tr)} come mandata e ritorno nei calcoli</button>${(l.Te!==''&&l.Te!=null&&isFinite(parseFloat(l.Te)))?`<button class="x" data-usecal="${l.id}">Taratura dal giorno: ${l.Te} °C fuori, mandata ${f0(l.Tm)}, ritorno ${f0(l.Tr)}</button>`:''}</div><p class="note">La taratura dal giorno usa i radiatori inseriti: vale se in quel momento le stanze erano a temperatura e i radiatori sono quelli giusti. La taratura dal carico (sopra) usa la potenza stimata dalla modulazione: sono due strade diverse, la seconda toglie la prima.</p>`;
   return h}
 function lettSum(){
@@ -784,15 +870,79 @@ function renderPosto(){
   <div class="card"><h2>Prima di andare via</h2><div class="row"><button class="pri" data-pexp="1">Salva dati (.json)</button><button onclick="window.print()">Stampa la checklist</button></div>
    <p class="note">I dati sono solo in questo browser: salva il file e tienine una copia. Per ricaricarli: scheda «Calcolo» → «Carica dati».</p></div>`;
 }
+/* ---------- pagina «Relazione»: calcolo a norma termine per termine ---------- */
+function renderRel(){
+  const R=sysCalc(S),g=S.g,E=envU(g),Te=num(g.Te),Tm=num(g.Tm),Tr=num(g.Tr);
+  const f2=x=>isFinite(x)?x.toLocaleString('it-IT',{minimumFractionDigits:2,maximumFractionDigits:2}):'—';
+  const B=t=>BU[t]||BU.p2f;
+  const bTxt=(t,Tn)=>B(t).b!=null?`b = ${f2(B(t).b)} → θu = ${f1(20-B(t).b*(20-Te))} °C`:`θu = ${f1(num(Tn,12))} °C (nota)`;
+  const com=(COMUNI.find(c=>c[1]!==''&&c[1]===g.Te)||[])[0];
+  const tr=(a,b,c)=>`<tr><td style="text-align:left;white-space:normal">${a}</td><td>${b}</td><td style="text-align:left;white-space:normal">${c}</td></tr>`;
+  const dUv=(g.dUtb===''||g.dUtb==null)?0.1:num(g.dUtb);
+  const dati=`<div class="card"><h2>1. Dati e ipotesi</h2><div class="tw"><table>
+   ${tr('Temperatura esterna di progetto θe',f1(Te)+' °C',(com?com+'. ':'')+"Verifica il valore del tuo comune e dell'altitudine nella UNI 10349-2.")}
+   ${tr('Muro esterno','U '+f2(E.wall.U)+' W/m²K',E.wall.src)}
+   ${tr('Finestre e portefinestre','U '+f2(E.win.U)+' W/m²K',E.win.src)}
+   ${tr('Solaio verso sopra','U '+f2(E.ceil.U)+' W/m²K',E.ceil.src)}
+   ${tr('Solaio verso sotto','U '+f2(E.floor.U)+' W/m²K',E.floor.src)}
+   ${tr('Ponti termici','ΔU '+f2(dUv)+' W/m²K','Sommata alla U di muri e solai (metodo semplificato della UNI EN 12831-1).')}
+   ${tr('Locale sopra',bTxt(g.upType,g.TuAbove),B(g.upType).n+'. Fattore b tipico (UNI/TS 11300-1); θu calcolata per una stanza a 20 °C.')}
+   ${tr('Locale sotto',bTxt(g.dnType,g.TuBelow),B(g.dnType).n+'.')}
+   ${tr('Vani laterali non riscaldati',bTxt(g.sdType,g.TuSide),B(g.sdType).n+'.')}
+   ${tr("Tenuta all'aria",`n50 = ${f1(E.n50)} 1/h`,E.n50src+'. Infiltrazioni = 2·V·n50·e (UNI EN 12831); esposizione: '+(ESP[g.esp]||ESP.normale).n+'.')}
+   ${tr('Ricambio minimo','0,5 / 1,5 1/h',"Stanze 0,5 ricambi all'ora; bagno e cucina 1,5. Vale il maggiore tra minimo e infiltrazioni.")}
+   ${tr('Ripresa',num(g.rip)+' %',"Maggiorazione sulle dispersioni per riportare la casa in temperatura dopo lo spegnimento.")}
+   ${tr('Radiatori',f0(Tm)+'/'+f0(Tr)+' °C','Mandata/ritorno di progetto. Resa = Φ50·(ΔTln/50)^n, con ΔTln differenza di temperatura logaritmica (UNI EN 442-2) ed esponente n del modello.')}
+   ${tr('Tipo di calcolo',R.norma?'a norma':'tarato ×'+kTxt(R.k),R.norma?'Nessuna correzione con il funzionamento reale.'+(R.kCal?` Il funzionamento reale ricordato vale il ${Math.round(R.kCal*100)} % di questo carico.`:''):'Carichi moltiplicati per far tornare il funzionamento reale: non è un calcolo a norma.')}
+  </table></div></div>`;
+  const rooms=R.rooms.map(x=>{const c=x.c,r=x.r;
+    const rows=c.el.map(e=>`<tr><td style="text-align:left;white-space:normal">${e.n}</td><td>${f2(e.A)}</td><td>${f2(e.U)}</td><td>${f1(e.t)}</td><td>${f0(e.phi)}</td></tr>`).join('');
+    const lmd=lmtd(Tm,Tr,c.Ti);
+    const rads=(r.rads||[]).map(a=>{const w=radW(a),n=radN(a,g),out=w*Math.pow(lmd/50,n);
+      const nome=a.tipo==='ghisa'?(NEO[a.mod]?NEO[a.mod].nome:'Ghisa generica')+` · ${num(a.n)} el.`:({alu:'Alluminio',tub:'Acciaio tubolare',acc:'Acciaio a piastra',altro:'Altro'})[a.tipo]+(num(a.n)>0&&a.tipo!=='acc'&&a.tipo!=='altro'?` · ${num(a.n)} el.`:'');
+      return `<tr><td style="text-align:left;white-space:normal">${nome}${num(a.w)>0?' (potenza scritta)':''}</td><td>${f0(w)}</td><td>${f2(n)}</td><td>${f1(lmd)}</td><td><b>${f0(out)}</b></td></tr>`}).join('');
+    return `<div class="card"><h2>${r.name||'Stanza'} · ${f1(c.Ti)} °C</h2>
+     <p class="note" style="margin:0 0 6px">Pavimento ${f2(c.A)} m², altezza ${f2(c.H)} m${num(r.H)>0?'':' (generale)'}, volume ${f1(c.V)} m³.</p>
+     <div class="tw"><table class="st"><tr><th>Trasmissione</th><th>A m²</th><th>U W/m²K</th><th>θ di là °C</th><th>Φ W</th></tr>${rows}
+      <tr><td style="text-align:left"><b>Totale trasmissione</b></td><td></td><td></td><td></td><td><b>${f0(c.pT)}</b></td></tr></table></div>
+     <p style="margin:8px 0 2px"><b>Ventilazione:</b> minimo ${f1(c.nMin)} 1/h = ${f0(c.Vmin)} m³/h; infiltrazioni 2·${f1(c.V)}·${f1(E.n50)}·${f2(c.e)} = ${f0(c.Vinf)} m³/h${c.ownAch?`; ricambi scritti da te ${f2(c.nEff)} 1/h`:''} → ${f0(c.Vi)} m³/h; Φ = 0,34 · ${f0(c.Vi)} · ${f1(c.dTe)} = <b>${f0(c.pV)} W</b>.</p>
+     <p style="margin:2px 0"><b>Ripresa:</b> ${num(g.rip)} % = ${f0(c.pR)} W.${R.k!==1?` <b>Taratura</b> ×${kTxt(R.k)} applicata.`:''}</p>
+     <p style="margin:2px 0 8px"><b>Carico di progetto Φ = ${f0(c.tot)} W</b> (${f0(c.wm2)} W/m²).</p>
+     ${rads?`<div class="tw"><table><tr><th>Radiatore</th><th>Φ50 W</th><th>n</th><th>ΔTln a ${f0(Tm)}/${f0(Tr)}</th><th>Rende W</th></tr>${rads}
+      <tr><td style="text-align:left"><b>Totale radiatori</b></td><td>${f0(c.have)}</td><td></td><td></td><td><b>${f0(c.have*Math.pow(lmd/50,c.nRad))}</b></td></tr></table></div>`:'<p class="note">Nessun radiatore.</p>'}</div>`}).join('');
+  const zone=R.zones.map(z=>{const c=z.c,d=c.have>0?c.avail-c.tot:null;
+    return `<tr><td style="text-align:left">${z.r.name}</td><td>${f0(c.tot)}</td><td>${c.have>0?f0(c.avail):'—'}</td><td>${d==null?'—':(d>=0?'+':'−')+f0(Math.abs(d))}</td><td>${c.have>0?(c.over?'oltre '+f0(R.TfMax)+' °C':f0(c.TfNeed)+' °C'):'—'}</td></tr>`}).join('');
+  const sum=`<div class="card"><h2>Riepilogo</h2><div class="tw"><table class="st"><tr><th>Stanza o zona</th><th>Carico W</th><th>Radiatori W a ${f0(Tm)}/${f0(Tr)}</th><th>Differenza W</th><th>Mandata minima (salto ${f0(R.dTw)} K)</th></tr>${zone}
+    <tr><td style="text-align:left"><b>Totale piano</b></td><td><b>${f0(R.tot)}</b></td><td></td><td></td><td></td></tr></table></div>
+    <p class="note">Superficie ${f1(R.area)} m², ${f0(R.wm2)} W/m². Potenza minima del generatore in riscaldamento ${f1(R.kW)} kW (carico + ${f0(num(g.marg))} % di margine).</p></div>`;
+  const miss=[];
+  if(!g.wallType)miss.push("Muro esterno: scegli la struttura vera o scrivi la stratigrafia (ora è il valore tipico dell'epoca).");
+  if(!g.winType)miss.push("Finestre: scegli il tipo di vetro e telaio (ora è il valore tipico dell'epoca).");
+  if(!g.ceilType||!g.floorType)miss.push("Solai sopra e sotto: scegli com'è fatto il solaio.");
+  miss.push(`Locali sopra e sotto: controlla cosa c'è davvero (ora: sopra «${B(g.upType).n}», sotto «${B(g.dnType).n}»). Pesano molto sul carico.`);
+  if(!(num(g.n50)>0))miss.push("Tenuta all'aria: stimata dall'epoca; se gli infissi sono nuovi o molto vecchi correggi n50.");
+  miss.push("Temperatura esterna di progetto: verifica il valore del comune e dell'altitudine nella UNI 10349-2.");
+  R.rooms.forEach(x=>{const r=x.r,nm=r.name||'Stanza';
+    if(!(num(r.H)>0))miss.push(`${nm}: misura l'altezza.`);
+    if(!(num(r.winArea)>0)&&num(r.nWin)>0)miss.push(`${nm}: misura le finestre (ora ${num(r.nWin)} × ${r1(num(r.winSize))} m²).`);
+    if(!(num(r.pfArea)>0)&&num(r.nPF)>0)miss.push(`${nm}: misura le portefinestre.`);
+    (r.rads||[]).forEach(a=>{if(a.tipo==='ghisa'&&!NEO[a.mod]&&!(num(a.w)>0))miss.push(`${nm}: radiatore in ghisa generico: scegli il modello o scrivi la potenza di catalogo.`)})});
+  miss.push('Bollette: m³ di gas per mese con letture vere, per confrontarli con i consumi calcolati (fase 2, UNI/TS 11300).');
+  document.getElementById('viewRel').innerHTML=`<div class="card"><h2>Relazione di calcolo</h2>
+   <p class="note">Carico termico di progetto stanza per stanza secondo UNI EN 12831-1:2018, trasmittanze dei muri secondo UNI EN ISO 6946, resa dei radiatori secondo UNI EN 442-2. Strumento di stima: non sostituisce la relazione firmata di un tecnico abilitato.</p>
+   <div class="row no-print"><button onclick="window.print()">Stampa / salva PDF</button></div></div>
+   ${dati}${rooms}${sum}
+   <div class="card"><h2>Dati da rilevare</h2><p class="note">Il calcolo vale quanto i dati: ecco cosa è ancora stimato.</p><ul class="l">${miss.map(t=>`<li>${t}</li>`).join('')}</ul></div>`}
 function setView(v){
-  S.view=v;[['calc','viewCalc'],['cald','viewCald'],['posto','viewPosto']].forEach(([k,id])=>{const el=document.getElementById(id);if(el)el.classList.toggle('hide',v!==k)});
+  S.view=v;[['calc','viewCalc'],['cald','viewCald'],['posto','viewPosto'],['rel','viewRel']].forEach(([k,id])=>{const el=document.getElementById(id);if(el)el.classList.toggle('hide',v!==k)});
   document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('pri',b.dataset.view===v));
-  if(v==='cald')renderCald();if(v==='posto')renderPosto();save()}
+  if(v==='cald')renderCald();if(v==='posto')renderPosto();if(v==='rel')renderRel();save()}
 
 /* ---------- eventi ---------- */
 document.addEventListener('input',e=>{
   const t=e.target;
   if(t.id==='comune'){if(t.value!==''){S.g.Te=parseFloat(t.value);document.querySelector('input[data-g="Te"]').value=S.g.Te;renderOut()}return}
+  if(t.dataset.lay!=null){const l=(S.g.wallLay||[])[+t.dataset.lay];if(l){l[t.dataset.lf]=t.dataset.lf==='s'?(t.value===''?'':parseFloat(t.value)):t.value;const u=document.getElementById('strU');if(u)u.textContent=r1(strataU(S.g.wallLay));renderOut()}return}
   if(t.dataset.pd!==undefined){S.posto.done[t.dataset.pd]=!!t.checked;save();const pcd=t.closest('.pc');if(pcd)pcd.classList.toggle('dn',!!t.checked);postoRefresh();return}
   if(t.dataset.pcfg){S.posto.cfg=t.value;save();renderPosto();return}
   if(t.dataset.pck){S.posto.ck[t.dataset.pck]=t.value===''?'':parseFloat(t.value);save();const el=document.getElementById('pcheck');if(el)el.innerHTML=postoCheck();return}
@@ -803,6 +953,7 @@ document.addEventListener('input',e=>{
       if(t.dataset.lk==='quando')box.querySelector('summary').firstChild.textContent=(t.value||'Lettura '+l.id)+' '}return}
   if(t.dataset.g){S.g[t.dataset.g]=(t.tagName==='INPUT'&&t.type==='number')?(t.value===''?'':parseFloat(t.value)):t.value;
     if(t.dataset.g==='Te'){const c=document.getElementById('comune');const m=COMUNI.find(x=>x[1]!==''&&x[1]===S.g.Te);c.value=m?String(m[1]):''}
+    if(t.tagName==='SELECT'&&['wallType','winType','ceilType','floorType','upType','dnType','sdType','esp','epoca'].includes(t.dataset.g))renderStr();
     renderOut();return}
   const det=t.closest&&t.closest('details.room');if(!det)return;
   const r=S.rooms.find(x=>x.id==det.dataset.id);if(!r)return;
@@ -821,6 +972,8 @@ document.addEventListener('input',e=>{
 document.addEventListener('click',e=>{
   const b=e.target.closest('button');if(!b)return;
   if(b.dataset.view){setView(b.dataset.view);return}
+  if(b.dataset.addlay){S.g.wallLay=S.g.wallLay||[];S.g.wallLay.push({m:'intonaco',s:1.5});renderStr();renderOut();return}
+  if(b.dataset.dellay!=null&&b.dataset.dellay!==''){S.g.wallLay.splice(+b.dataset.dellay,1);renderStr();renderOut();return}
   if(b.dataset.usecp){const p=condPlan(S,sysCalc(S));if(p&&!p.fail){S.g.dTp=p.best.dT;S.g.Tm=p.best.Tf;S.g.Tr=p.best.Tr;save();renderG();renderOut();if(S.view==='posto')renderPosto()}return}
   if(b.dataset.goto){const el=document.getElementById(b.dataset.goto);if(el)el.scrollIntoView({behavior:'smooth',block:'start'});return}
   if(b.dataset.pexp){document.getElementById('exportJson').click();return}
