@@ -50,6 +50,8 @@ th{color:var(--mut);font-weight:600}
 ul.l{margin:6px 0 0 18px;padding:0}ul.l li{margin:3px 0}
 svg text{fill:var(--mut);font-size:11px}
 .hide{display:none}
+body:not(.adv) .adv-only{display:none!important}
+.auto{font-size:12.5px;color:var(--mut);background:var(--soft);border-radius:8px;padding:8px 10px;margin-top:8px}
 details.more{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin:12px 0}
 details.more>summary{cursor:pointer;font-weight:600}
 details.more>.card{border:0;padding:0;margin:8px 0 0}
@@ -86,28 +88,54 @@ details.more h2{display:none}
 <body>
 <main>
 <h1>Dimensionamento riscaldamento</h1>
-<p class="sub">Calcolo semplificato ispirato alla UNI EN 12831 per riscaldare un solo piano con piani freddi sopra e sotto. Dove non sai un dato lascia il valore proposto. Quello che vedi ora è un esempio da sostituire.</p>
+<p class="sub">Carico termico a norma (UNI EN 12831-1), radiatori (UNI EN 442-2) e consumi (UNI/TS 11300) per il piano riscaldato. Rispondi alle domande in parole semplici: i valori tecnici li ricava l'app. Dove non sai un dato lascia «non so».</p>
 
 <div class="row no-print" id="tabs" style="margin:8px 0"><button data-view="calc" class="pri">Calcolo</button><button data-view="cald">Caldaia e ΔT</button><button data-view="posto">Sul posto</button><button data-view="rel">Relazione</button><button data-view="cons">Consumi</button><button data-view="orari">Orari</button></div>
+<div class="row no-print" style="margin:0 0 8px"><span class="note">Vista:</span><button data-ui="semplice" class="x">Semplice</button><button data-ui="avanzato" class="x">Avanzata (valori tecnici)</button></div>
 <div id="viewCalc">
 <div id="ans"></div>
 <div class="card no-print">
   <h2>1. La casa</h2>
   <div class="grid">
+    <label>Comune<select data-g="comune" id="comune"></select></label>
+    <label>Anno di costruzione<input type="number" step="1" data-g="anno" placeholder="es. 1985"></label>
+    <label class="wide">Dove si trova<select data-g="esp"><option value="riparata">in paese, tra le altre case</option><option value="normale">in paese, abbastanza libera</option><option value="esposta">in campagna aperta o in collina, al vento</option></select></label>
+    <label class="wide">Muri esterni<select data-g="muroTipo"><option value="">non so</option><option value="pieno">mattoni pieni</option><option value="cassa">forati con intercapedine (cassa vuota)</option><option value="blocco">blocchi di laterizio semipieni</option><option value="poroton">blocchi alveolati (tipo Poroton)</option><option value="pietra">pietra</option><option value="cls">calcestruzzo</option></select></label>
+    <label>Spessore del muro (cm)<input type="number" step="1" data-g="muroSp" placeholder="misuralo a una finestra"></label>
+    <label>Isolante nel muro<select data-g="muroIso"><option value="nonso">non so</option><option value="no">no</option><option value="poco">poco (circa 4 cm)</option><option value="cap">cappotto (circa 10 cm)</option></select></label>
+    <label>Vetri<select data-g="vetro"><option value="">non so</option><option value="singolo">vetro singolo</option><option value="doppio">doppio vetro vecchio</option><option value="nuovo">doppio vetro recente (dopo il 2005)</option><option value="triplo">triplo vetro</option></select></label>
+    <label>Telaio delle finestre<select data-g="telaio"><option value="legno">legno</option><option value="pvc">PVC</option><option value="alluminioTT">alluminio a taglio termico</option><option value="alluminio">alluminio vecchio</option></select></label>
+    <label class="wide">Sopra al piano c'è<select data-g="sopra"><option value="">non so</option><option value="chiuso">un piano chiuso non riscaldato</option><option value="sottotetto">il sottotetto, tetto non isolato</option><option value="sottotettoI">il sottotetto, tetto isolato</option><option value="tetto">direttamente il tetto</option><option value="risc">casa riscaldata</option></select></label>
+    <label class="wide">Sotto al piano c'è<select data-g="sotto"><option value="">non so</option><option value="chiuso">un piano chiuso non riscaldato</option><option value="garage">garage o locali chiusi con finestre</option><option value="cantina">cantina interrata o seminterrata</option><option value="terreno">il terreno</option><option value="risc">casa riscaldata</option></select></label>
+  </div>
+  <div class="auto" id="casaNote"></div>
+  <div class="adv-only" style="margin-top:10px">
+   <div class="grid">
     <label class="wide">Tipo di calcolo<select data-g="mode"><option value="norma">A norma (UNI EN 12831-1, radiatori UNI EN 442-2)</option><option value="tarato">Tarato sul funzionamento reale</option></select></label>
-    <label>Comune<select id="comune"></select></label>
-    <label>Temp. minima esterna (°C)<input type="number" step="1" data-g="Te"></label>
-    <label class="wide">Com'è costruita la casa<select data-g="epoca" id="epoca"></select></label>
+    <label>Temperatura esterna di progetto (°C)<input type="number" step="1" data-g="Te"></label>
+    <label>Gradi giorno (se il comune non è in elenco)<input type="number" step="1" data-g="GG" placeholder="2617"></label>
+    <label class="wide">Epoca (se non scrivi l'anno)<select data-g="epoca" id="epoca"></select></label>
+   </div>
+   <details class="adv"><summary>Impostazioni avanzate</summary><div class="grid" id="gForm" style="margin-top:8px"></div></details>
+  </div>
+</div>
+<div class="card no-print">
+  <h2>2. Impianto</h2>
+  <div class="grid">
+    <label>Mandata massima (°C)<input type="number" step="1" data-g="TfMax"></label>
+    <label>Far condensare la caldaia<select data-g="condensa"><option value="si">sì (ritorno al massimo 55 °C)</option><option value="no">no, conta solo scaldare</option></select></label>
+    <label class="wide">Sonda esterna<select data-g="sonda"><option value="no">no, non c'è</option><option value="si">sì, c'è (curva climatica)</option></select></label>
+  </div>
+  <div class="auto" id="impNote"></div>
+  <div class="grid adv-only" style="margin-top:10px">
+    <label class="wide">Mandata, ritorno e salto<select data-g="impAuto"><option value="1">automatici (calcolati dall'app)</option><option value="0">scritti da me</option></select></label>
     <label>Mandata di progetto (°C)<input type="number" step="1" data-g="Tm"></label>
     <label>Ritorno di progetto (°C)<input type="number" step="1" data-g="Tr"></label>
-    <label>Mandata massima (°C)<input type="number" step="1" data-g="TfMax"></label>
     <label>Ritorno massimo (°C)<input type="number" step="1" data-g="TrMax"></label>
-    <label class="wide">Salto sul circolatore (par. 34)<select data-g="dTp"><option value="20">20 K (par. 34 = 0)</option><option value="15">15 K (par. 34 = 1)</option><option value="10">10 K (par. 34 = 2)</option><option value="5">5 K (par. 34 = 3)</option></select></label>
+    <label>Salto sul circolatore (par. 34)<select data-g="dTp"><option value="20">20 K (par. 34 = 0)</option><option value="15">15 K (par. 34 = 1)</option><option value="10">10 K (par. 34 = 2)</option><option value="5">5 K (par. 34 = 3)</option></select></label>
   </div>
-  <p class="note">Mandata massima: il limite di caldaia e tubi. Ritorno massimo: oltre questo la caldaia non condensa. Le temperature minime per comune sono indicative: verificale. «Com'è costruita la casa» dà i valori tipici di muri, finestre e solai quando nella scheda 2 non scegli la struttura vera. Il calcolo «tarato» moltiplica i carichi per farli tornare con il giorno che ricordi o con una lettura della caldaia: utile per capire, ma non è a norma.</p>
-  <details class="adv"><summary>Impostazioni avanzate (di solito non servono)</summary><div class="grid" id="gForm" style="margin-top:8px"></div></details>
 </div>
-<div class="card no-print" id="strCard"></div>
+<div class="card no-print adv-only" id="strCard"></div>
 
 <div class="card no-print">
   <div class="row" style="justify-content:space-between">
@@ -207,13 +235,58 @@ const BU={nota:{n:'temperatura nota (scritta nelle impostazioni avanzate)',b:nul
 // coefficiente di schermatura e (UNI EN 12831) per [nessuna apertura esposta, una, più di una]
 const ESP={riparata:{n:'riparata (tra le case, alberi)',e:[0,0.01,0.02]},normale:{n:'normale',e:[0,0.02,0.03]},esposta:{n:'esposta al vento (campagna, collina)',e:[0,0.03,0.05]}};
 const NMIN=t=>(t==='Bagno'||t==='Cucina')?1.5:0.5; // ricambi minimi (UNI EN 12831): bagno e cucina 1,5, altri locali 0,5
-// trasmittanze in uso: struttura scelta, altrimenti valore tipico dell'epoca, con la provenienza
-function envU(g){const P=EPOCHE[g.epoca]||EPOCHE.nonso,ep="valore tipico dell'epoca";
-  const wall=g.wallType==='strat'?{U:strataU(g.wallLay),src:'stratigrafia scritta da te (UNI EN ISO 6946)'}:MURI[g.wallType]?{U:MURI[g.wallType].U,src:MURI[g.wallType].n}:{U:P.wall,src:ep};
-  const win=FIN[g.winType]?{U:FIN[g.winType].U,src:FIN[g.winType].n}:{U:P.win,src:ep};
+// ---- dati semplici: dalle risposte in parole povere ai parametri tecnici ----
+// comuni: temperatura esterna di progetto, gradi giorno e zona climatica (DPR 412/93)
+const COMUNI2={Torino:{Te:-8,GG:2617,z:'E'},Cuneo:{Te:-10,GG:3012,z:'F'},Aosta:{Te:-10,GG:2850,z:'E'},Milano:{Te:-5,GG:2404,z:'E'},Bologna:{Te:-5,GG:2259,z:'E'},
+ Firenze:{Te:0,GG:1821,z:'D'},Roma:{Te:0,GG:1415,z:'D'},Napoli:{Te:2,GG:1034,z:'C'},Palermo:{Te:5,GG:751,z:'B'}};
+// stagione di riscaldamento per zona (DPR 412/93): giorni di ogni mese; la zona F non ha limiti, uso 5 ottobre - 22 aprile
+const ZONE={A:{dic:31,gen:31,feb:28,mar:15},B:{dic:31,gen:31,feb:28,mar:31},C:{nov:16,dic:31,gen:31,feb:28,mar:31},D:{nov:30,dic:31,gen:31,feb:28,mar:31,apr:15},
+ E:{ott:17,nov:30,dic:31,gen:31,feb:28,mar:31,apr:15},F:{ott:27,nov:30,dic:31,gen:31,feb:28,mar:31,apr:22}};
+const NOMI_MESI={ott:'Ottobre',nov:'Novembre',dic:'Dicembre',gen:'Gennaio',feb:'Febbraio',mar:'Marzo',apr:'Aprile'};
+const PIENI={ott:31,nov:30,dic:31,gen:31,feb:28,mar:31,apr:30};
+function zonaDaGG(G){return G<=600?'A':G<=900?'B':G<=1400?'C':G<=2100?'D':G<=3000?'E':'F'}
+function clima(g){const c=COMUNI2[g.comune];
+  const GG=c?c.GG:(num(g.GG)>0?num(g.GG):2617),z=c?c.z:(g.zona&&ZONE[g.zona]?g.zona:zonaDaGG(GG));
+  return {nome:c?g.comune:'',Te:num(g.Te,c?c.Te:-5),GG,z}}
+// mesi della stagione con la temperatura media: profilo tipico del Nord Italia spostato per avere i gradi giorno del comune; quelle scritte da te valgono di più
+function stagione(S){const g=S.g,K=clima(g),Z=ZONE[K.z],tm=(S.cons&&S.cons.tm)||{};
+  const ks=Object.keys(Z),D=ks.reduce((s,k)=>s+Z[k],0),G0=ks.reduce((s,k)=>s+Z[k]*(20-TM_DEF[k]),0),d=(G0-K.GG)/D;
+  return ks.map(k=>{const own=tm[k]!==''&&tm[k]!=null&&isFinite(parseFloat(tm[k]));
+    return {key:k,name:NOMI_MESI[k]+(Z[k]<PIENI[k]?` (${Z[k]} giorni)`:''),days:Z[k],te:own?num(tm[k]):Math.round((TM_DEF[k]+d)*10)/10,teAuto:Math.round((TM_DEF[k]+d)*10)/10,own}})}
+function epocaEff(g){const a=num(g.anno);if(a>1800)return a<=1975?'s70':a<=1990?'s90':a<=2008?'s2000':'nuova';return EPOCHE[g.epoca]?g.epoca:'nonso'}
+// muro: tipo, spessore e isolante → U con UNI EN ISO 6946 (intonaci 1,5 + 1,5 cm, Rsi 0,13, Rse 0,04)
+const MURO_T={pieno:{n:'mattoni pieni',l:0.72,sp:30},cassa:{n:'forati con intercapedine (cassa vuota)',sp:30},blocco:{n:'blocchi di laterizio semipieni',l:0.45,sp:30},
+ poroton:{n:'blocchi alveolati (tipo Poroton)',l:0.23,sp:30},pietra:{n:'pietra',l:2.3,sp:50},cls:{n:'calcestruzzo',l:2.3,sp:25}};
+function isoEff(g){if(g.muroIso&&g.muroIso!=='nonso')return g.muroIso;const a=num(g.anno);return a>=2006?'cap':a>=1976?'poco':'no'}
+function muroU(g){const t=MURO_T[g.muroTipo];if(!t)return null;const sp=num(g.muroSp)>0?num(g.muroSp):t.sp,core=Math.max(0.05,sp/100-0.03);
+  let R=0.13+0.04+0.03/0.9;
+  if(g.muroTipo==='cassa'){const air=Math.min(0.10,Math.max(0.04,core-0.20));R+=0.18+(core-air)/0.40}else R+=core/t.l;
+  const iso=isoEff(g);if(iso==='poco')R+=0.04/0.04;else if(iso==='cap')R+=0.10/0.035;
+  return {U:1/R,src:`${t.n}, ${Math.round(sp)} cm${iso==='poco'?', con circa 4 cm di isolante':iso==='cap'?', con cappotto di circa 10 cm':', senza isolante'} (UNI EN ISO 6946)`}}
+// finestre: vetro e telaio → U della finestra (valori tipici UNI EN ISO 10077) e fattore solare del vetro
+const VETRI={singolo:{n:'vetro singolo',g:0.85,U:{legno:4.9,alluminio:5.8,alluminioTT:5.6,pvc:4.8}},doppio:{n:'doppio vetro vecchio',g:0.75,U:{legno:2.8,alluminio:3.7,alluminioTT:3.0,pvc:2.7}},
+ nuovo:{n:'doppio vetro recente basso emissivo',g:0.6,U:{legno:1.4,alluminio:1.9,alluminioTT:1.6,pvc:1.3}},triplo:{n:'triplo vetro',g:0.5,U:{legno:1.0,alluminio:1.5,alluminioTT:1.2,pvc:0.9}}};
+const TELAI={legno:'legno',pvc:'PVC',alluminioTT:'alluminio a taglio termico',alluminio:'alluminio senza taglio termico'};
+function finU(g){const v=VETRI[g.vetro];if(!v)return null;const t=v.U[g.telaio]!=null?g.telaio:'legno';return {U:v.U[t],g:v.g,src:`${v.n}, telaio in ${TELAI[t]}`}}
+// sopra e sotto il piano: valgono per tutte le stanze (una stanza diversa si cambia nei suoi dettagli)
+const SOPRA={risc:{n:'casa riscaldata',to:'heated'},chiuso:{n:'piano chiuso non riscaldato',to:'unh',b:'p2f'},sottotetto:{n:'sottotetto, tetto non isolato',to:'unh',b:'stn'},
+ sottotettoI:{n:'sottotetto, tetto isolato',to:'unh',b:'sti'},tetto:{n:'direttamente il tetto',to:'out'}};
+const SOTTO={risc:{n:'casa riscaldata',to:'heated'},chiuso:{n:'piano chiuso non riscaldato',to:'unh',b:'p2f'},cantina:{n:'cantina interrata o seminterrata',to:'unh',b:'int'},
+ garage:{n:'garage o locali chiusi con finestre',to:'unh',b:'p2f'},terreno:{n:'il terreno',to:'ground'}};
+function house(g){const so=SOPRA[g.sopra],st=SOTTO[g.sotto];return {ceilTo:so?so.to:'unh',upType:so&&so.b?so.b:g.upType,floorTo:st?st.to:'unh',dnType:st&&st.b?st.b:g.dnType}}
+// valori automatici di consumi e orari
+function oreFasce(S){const F=parseFasce(S.orari&&S.orari.fasce);return F.length?F.reduce((t,[a,b])=>t+b-a,0):24}
+function inerziaEff(S){const v=S.cons&&S.cons.inerzia;if(v)return v;return ['pieno','pietra','cls'].includes(S.g.muroTipo)?'pesante':S.g.muroTipo?'media':'media'}
+function etaAuto(S){const g=S.g,son=g.sonda==='si',Tr=num(g.Tr,50);
+  return {ee:0.93,ed:0.95,erg:son?0.97:0.95,egn:son?(Tr<=55?0.97:0.94):(Tr<=45?0.96:Tr<=55?0.94:0.90)}}
+function etaEff(S){const C=S.cons||{},A=etaAuto(S),v=k=>num(C[k])>0?num(C[k]):A[k];return {ee:v('ee'),erg:v('erg'),ed:v('ed'),egn:v('egn')}}
+// trasmittanze in uso: struttura scelta, poi le risposte semplici, altrimenti il valore tipico dell'epoca
+function envU(g){const P=EPOCHE[epocaEff(g)]||EPOCHE.nonso,ep="valore tipico dell'epoca",MU=muroU(g),FU=finU(g);
+  const wall=g.wallType==='strat'?{U:strataU(g.wallLay),src:'stratigrafia scritta da te (UNI EN ISO 6946)'}:MURI[g.wallType]?{U:MURI[g.wallType].U,src:MURI[g.wallType].n}:MU?MU:{U:P.wall,src:ep};
+  const win=FIN[g.winType]?{U:FIN[g.winType].U,src:FIN[g.winType].n}:FU?{U:FU.U,src:FU.src}:{U:P.win,src:ep};
   const sl=(t,key,own)=>SOLAI[t]?{U:SOLAI[t][key],src:SOLAI[t].n}:(t==='U'&&num(own)>0)?{U:num(own),src:'scritta da te'}:{U:P.slab,src:ep};
   return {wall,win,ceil:sl(g.ceilType,'Uup',g.ceilUg),floor:sl(g.floorType,'Udn',g.floorUg),roof:{U:P.roof,src:ep},
-    n50:num(g.n50)>0?num(g.n50):(N50[g.epoca]||7),n50src:num(g.n50)>0?'scritto da te':"tipico dell'epoca"}}
+    n50:num(g.n50)>0?num(g.n50):(N50[epocaEff(g)]||7),n50src:num(g.n50)>0?'scritto da te':"tipico dell'epoca"}}
 // temperatura di un locale non riscaldato accanto: dal fattore b, oppure quella nota
 function thetaU(type,Ti,Te,Tnota){const B=BU[type]||BU.p2f;return B.b!=null?Ti-B.b*(Ti-Te):num(Tnota,12)}
 function radN(a,g){return (a.tipo==='ghisa'&&NEO[a.mod])?NEO[a.mod].n:num(g.expo,1.3)}
@@ -227,11 +300,12 @@ function roomCalc(r,g){
   const wallA=Math.max(0,wallLen(r)*H-win);
   // trasmissione: U dell'elemento + ΔU dei ponti termici sugli elementi opachi
   const Uw=(num(r.wallU)>0?num(r.wallU):E.wall.U)+dU, Uv=num(r.winU)>0?num(r.winU):E.win.U, Up=num(r.pfU)>0?num(r.pfU):Uv;
-  const Uf=r.floorTo==='heated'?0:(num(r.floorU)>0?num(r.floorU):E.floor.U)+dU;
-  const Uc=r.ceilTo==='heated'?0:(num(r.ceilU)>0?num(r.ceilU):(r.ceilTo==='out'?E.roof.U:E.ceil.U))+dU;
+  const HS=house(g),fT=r.floorTo||HS.floorTo,cT=r.ceilTo||HS.ceilTo,upT=HS.upType,dnT=HS.dnType;
+  const Uf=fT==='heated'?0:(num(r.floorU)>0?num(r.floorU):E.floor.U)+dU;
+  const Uc=cT==='heated'?0:(num(r.ceilU)>0?num(r.ceilU):(cT==='out'?E.roof.U:E.ceil.U))+dU;
   const Uo=(num(r.otherU)>0?num(r.otherU):E.wall.U)+dU;
-  const Tf=r.floorTo==='heated'?Ti:r.floorTo==='ground'?10:r.floorTo==='out'?Te:thetaU(g.dnType,Ti,Te,g.TuBelow);
-  const Tc=r.ceilTo==='heated'?Ti:r.ceilTo==='out'?Te:thetaU(g.upType,Ti,Te,g.TuAbove);
+  const Tf=fT==='heated'?Ti:fT==='ground'?10:fT==='out'?Te:thetaU(dnT,Ti,Te,g.TuBelow);
+  const Tc=cT==='heated'?Ti:cT==='out'?Te:thetaU(upT,Ti,Te,g.TuAbove);
   const Ts=thetaU(g.sdType,Ti,Te,g.TuSide);
   const pWall=Uw*wallA*dTe, pWin=(Uv*winF+Up*winP)*dTe, pFloor=Uf*A*(Ti-Tf), pCeil=Uc*A*(Ti-Tc), pOther=Uo*num(r.otherArea)*(Ti-Ts);
   const pT=Math.max(0,pWall+pWin+pFloor+pCeil+pOther);
@@ -247,10 +321,10 @@ function roomCalc(r,g){
   const nRad=have>0?rads.reduce((s,a)=>s+radW(a)*radN(a,g),0)/have:num(g.expo,1.3);
   const lab=t=>({unh:'locale non riscaldato',ground:'terreno',out:'esterno',heated:'locale riscaldato'})[t]||t;
   const el=[{n:'Pareti esterne',A:wallA,U:Uw,t:Te,phi:pWall},{n:'Finestre',A:winF,U:Uv,t:Te,phi:Uv*winF*dTe},{n:'Portefinestre',A:winP,U:Up,t:Te,phi:Up*winP*dTe},
-    {n:'Pavimento verso '+lab(r.floorTo),A,U:Uf,t:Tf,phi:pFloor},{n:'Soffitto verso '+lab(r.ceilTo),A,U:Uc,t:Tc,phi:pCeil},
+    {n:'Pavimento verso '+lab(fT),A,U:Uf,t:Tf,phi:pFloor},{n:'Soffitto verso '+lab(cT),A,U:Uc,t:Tc,phi:pCeil},
     {n:'Pareti verso vani non riscaldati',A:num(r.otherArea),U:Uo,t:Ts,phi:pOther}].filter(x=>x.A>0&&x.U>0);
   return {Ti,A,V,H,dTe,wallA,win,winF,winP,pWall,pWin,pFloor,pCeil,pOther,pT,pV,pR,tot,wm2:A>0?tot/A:0,have,nRad,
-    Vinf,Vmin,Vi,nMin,nEff:V>0?Vi/V:0,ownAch:own,el,Tf,Tc,Ts,e};
+    Vinf,Vmin,Vi,nMin,nEff:V>0?Vi/V:0,ownAch:own,el,Tf,Tc,Ts,e,fT,cT,upT,dnT};
 }
 // ---- radiatori, UNI EN 442-2: resa = Φ50·(ΔTln/50)^n, con ΔTln differenza di temperatura logaritmica ----
 function lmtd(tf,tr,ti){const a=tf-ti,b=Math.max(tr-ti,0.05);if(a<=0.05)return 0;if(Math.abs(a-b)<1e-6)return a;return (a-b)/Math.log(a/b)}
@@ -389,7 +463,7 @@ function solRoom(S,x,R,Z){
   const add=(id,label,after,note)=>{const dW=tot0-after;if(dW>=15){const rest=Z.tot-dW;opts.push({id,label,dW,after:rest,note:note||'',okD:Z.have>0&&rest<=Z.avail,okM:Z.have>0&&rest<=Z.availMax})}};
   const Uv=num(r.winU)>0?num(r.winU):E.win.U, Up=num(r.pfU)>0?num(r.pfU):Uv;
   const Uw=num(r.wallU)>0?num(r.wallU):E.wall.U;
-  const Uf=num(r.floorU)>0?num(r.floorU):E.floor.U, Uc=num(r.ceilU)>0?num(r.ceilU):(r.ceilTo==='out'?E.roof.U:E.ceil.U);
+  const Uf=num(r.floorU)>0?num(r.floorU):E.floor.U, Uc=num(r.ceilU)>0?num(r.ceilU):(c.cT==='out'?E.roof.U:E.ceil.U);
   const comb={},gComb=Object.assign({},g);
   if((c.winF>0&&Uv>1.45)||(c.winP>0&&Up>1.45)){
     const nm=c.winF>0&&c.winP>0?'Finestre e portefinestre nuove':c.winP>0?'Portefinestre nuove':'Finestre nuove';
@@ -397,11 +471,11 @@ function solRoom(S,x,R,Z){
   if(c.ownAch?c.nEff>c.nMin+0.05:c.Vinf>c.Vmin*1.05){add('ach',`Infissi e cassonetti più ermetici: aria da ${r1(c.nEff)} a ${r1(c.nMin)} ricambi all'ora (il minimo per questa stanza)`,withR({ach:c.nMin}));comb.ach=c.nMin}
   if(r.ext!=='0'&&Uw>0.6){add('wall',`Isolare la parete esterna (cappotto: U 0,3 invece di ${r1(Uw)})`,withR({wallU:0.3}));comb.wallU=0.3}
   const sl={};
-  if(r.floorTo==='unh'&&Uf>0.6)sl.floorU=0.45;
-  if(r.ceilTo==='unh'&&Uc>0.6)sl.ceilU=0.45;
+  if(c.fT==='unh'&&Uf>0.6)sl.floorU=0.45;
+  if(c.cT==='unh'&&Uc>0.6)sl.ceilU=0.45;
   if(Object.keys(sl).length){add('slab','Isolare il solaio sopra e/o sotto (U 0,45)',withR(sl));Object.assign(comb,sl)}
   if(num(g.rip)>0){add('rip','Riscaldamento sempre acceso, senza maggiorazione di ripresa',calc(Object.assign({},g,{rip:0}),r),'solo se lo tieni acceso di continuo');gComb.rip=0}
-  if((r.floorTo==='unh'&&g.dnType==='nota')||(r.ceilTo==='unh'&&g.upType==='nota')){
+  if((c.fT==='unh'&&c.dnT==='nota')||(c.cT==='unh'&&c.upT==='nota')){
     const tb=num(g.TuBelow),ta=num(g.TuAbove);
     add('tu',`Se i piani sopra/sotto restano a ${r1(tb+3)}/${r1(ta+3)} °C invece di ${r1(tb)}/${r1(ta)} (scale aperte, un po' di calore che sale o scende)`,calc(Object.assign({},g,{TuBelow:tb+3,TuAbove:ta+3}),r),'da verificare misurando la temperatura di quei piani');
   }
@@ -535,22 +609,22 @@ const IRR={S:{ott:10.0,nov:7.6,dic:6.9,gen:7.9,feb:9.6,mar:10.4,apr:9.4},SE:{ott
 const ORIENT=[['','non so (come est/ovest)'],['N','nord'],['NE','nord-est'],['E','est'],['SE','sud-est'],['S','sud'],['SO','sud-ovest'],['O','ovest'],['NO','nord-ovest']];
 function irr(o,m){return IRR[({S:'S',SE:'SE',SO:'SE',E:'E',O:'E',NE:'NE',NO:'NE',N:'N'})[o]||'E'][m]}
 // fattore solare del vetro (incidenza normale)
-function gWin(g){const t=g.winType;if(t==='be')return 0.67;if(t==='tr')return 0.5;if(t==='vs_l'||t==='vs_m')return 0.85;if(t)return 0.75;return (EPOCHE[g.epoca]||EPOCHE.nonso).win>=4.5?0.85:0.75}
-const defCons=()=>({ore:24,inerzia:'media',ee:0.93,erg:0.95,ed:0.95,egn:0.95,acs:'si',Sacs:'',cuc:0,tm:Object.assign({},TM_DEF),bol:{ott:'',nov:'',dic:'',gen:'',feb:'',mar:'',apr:''},bolV:'nonso'});
+function gWin(g){const t=g.winType,FU=finU(g);if(!t&&FU)return FU.g;if(t==='be')return 0.67;if(t==='tr')return 0.5;if(t==='vs_l'||t==='vs_m')return 0.85;if(t)return 0.75;return (EPOCHE[epocaEff(g)]||EPOCHE.nonso).win>=4.5?0.85:0.75}
+const defCons=()=>({ore:'',inerzia:'',ee:'',erg:'',ed:'',egn:'',acs:'si',Sacs:'',cuc:0,tm:{},bol:{ott:'',nov:'',dic:'',gen:'',feb:'',mar:'',apr:''},bolV:'nonso'});
 const PCI=9.6; // kWh per Sm³ di metano (potere calorifico inferiore)
 function consCalc(S){
   const g=S.g,C=Object.assign(defCons(),S.cons||{}),R=sysCalc(S),k=R.k;
   const Af=R.area,phiInt=Af<=120?7.987*Af-0.0353*Af*Af:450; // apporti interni per abitazioni (UNI/TS 11300-1)
-  const kap=({leggera:80,media:165,pesante:260})[C.inerzia]||165; // capacità termica interna kJ/m²K (UNI EN ISO 13790)
+  const kap=({leggera:80,media:165,pesante:260})[inerziaEff(S)]||165; // capacità termica interna kJ/m²K (UNI EN ISO 13790)
   const H=R.rooms.reduce((s,x)=>s+(x.c.pT+x.c.pV)/(x.c.dTe>0?x.c.dTe:1),0); // W/K a regime (con la taratura se il calcolo è tarato)
   const tau=H>0?kap*Af/(3.6*H):50; // costante di tempo in ore
-  const etaG=num(C.ee,0.93)*num(C.erg,0.95)*num(C.ed,0.95)*num(C.egn,0.95);
-  const f=Math.min(1,Math.max(1/24,num(C.ore,24)/24));
+  const EE=etaEff(S),etaG=EE.ee*EE.erg*EE.ed*EE.egn,ore=num(C.ore)>0?num(C.ore):oreFasce(S);
+  const f=Math.min(1,Math.max(1/24,ore/24));
   const Su=num(C.Sacs)>0?num(C.Sacs):Af;
   const Vw=Su<=35?50:Su<=50?2.667*Su-43.33:Su<=200?1.067*Su+36.67:250; // litri al giorno di acqua calda (UNI/TS 11300-2)
   const capKW=R.rooms.reduce((s,x)=>s+x.c.have*radFac(R.TfMax,R.TfMax-R.dTc,18,x.c.n),0)/1000; // radiatori a pieno, stanze a 18 °C
-  const months=MESI.map(([key,name,days])=>{
-    const te=num(C.tm[key],TM_DEF[key]),t=days*24,gm=Object.assign({},g,{Te:te,rip:0});
+  const months=stagione(S).map(({key,name,days,te,teAuto,own})=>{
+    const t=days*24,gm=Object.assign({},g,{Te:te,rip:0});
     let Qht=0,Qsol=0;
     for(const x of R.rooms){const c=roomCalc(x.r,gm);Qht+=(c.pT+c.pV)*k*t/1000;
       Qsol+=c.win*0.75*gWin(g)*0.9*0.8*irr(x.r.orient,key)*days/3.6}; // telaio 25 %, vetro reale 0,9, ombre 0,8; MJ → kWh
@@ -563,11 +637,11 @@ function consCalc(S){
     const gasN=Qnd/etaG/PCI,gasI=QdelI/etaG/PCI,gasCap=capKWh/etaG/PCI;
     const Qw=C.acs==='si'?0.02905*Vw*days:0,gasW=Qw/0.80/PCI,gasK=num(C.cuc)*days/30;
     const bol=C.bol[key]===''||C.bol[key]==null?null:num(C.bol[key]);
-    return {key,name,days,te,Qht,Qint,Qsol,Qgn,gam,eta,Qnd,ared,QndI,QdelI,QdelC,capKWh,short:QndI>capKWh+1,gasN,gasI,gasCap,Qw,gasW,gasK,tot:gasI+gasW+gasK,totN:gasN+gasW+gasK,bol};
+    return {key,name,days,te,teAuto,own,Qht,Qint,Qsol,Qgn,gam,eta,Qnd,ared,QndI,QdelI,QdelC,capKWh,short:QndI>capKWh+1,gasN,gasI,gasCap,Qw,gasW,gasK,tot:gasI+gasW+gasK,totN:gasN+gasW+gasK,bol};
   });
   const sum=key=>months.reduce((s,m)=>s+(m[key]||0),0);
   const withBol=months.filter(m=>m.bol!=null);
-  return {months,phiInt,tau,H,etaG,f,Vw,Su,capKW,GG:months.reduce((s,m)=>s+m.days*Math.max(0,20-m.te),0),
+  return {months,phiInt,tau,H,etaG,EE,ore,f,Vw,clima:clima(g),Su,capKW,GG:months.reduce((s,m)=>s+m.days*Math.max(0,20-m.te),0),
     tot:{Qht:sum('Qht'),Qgn:sum('Qgn'),Qnd:sum('Qnd'),QndI:sum('QndI'),gasN:sum('gasN'),gasI:sum('gasI'),gasCap:sum('gasCap'),gasW:sum('gasW'),gasK:sum('gasK'),tot:sum('tot'),totN:sum('totN')},
     bol:withBol.length?{n:withBol.length,bol:withBol.reduce((s,m)=>s+m.bol,0),calc:withBol.reduce((s,m)=>s+m.tot,0),cap:withBol.reduce((s,m)=>s+m.gasCap+m.gasW+m.gasK,0),norm:withBol.reduce((s,m)=>s+m.totN,0)}:null};
 }
@@ -583,24 +657,24 @@ function simModel(S){
   for(const x of R.rooms){const c=x.c,r=x.r,dT=c.dTe>0?c.dTe:1;
     Hair+=(c.pWin+c.pV)/dT; // finestre e aria: sul nodo dell'aria, verso fuori
     Hmass+=c.pWall/dT;      // muri esterni: sul nodo dei muri, verso fuori
-    const adj=[[c.pFloor,c.Tf,r.floorTo,g.dnType],[c.pCeil,c.Tc,r.ceilTo,g.upType],[c.pOther,c.Ts,'unh',g.sdType]];
+    const adj=[[c.pFloor,c.Tf,c.fT,c.dnT],[c.pCeil,c.Tc,c.cT,c.upT],[c.pOther,c.Ts,'unh',g.sdType]];
     for(const [phi,t,to,typ] of adj){if(!(phi>0))continue;
       const fixedT=to==='ground'||(to==='unh'&&BU[typ]&&BU[typ].b==null);
       if(fixedT){const d=c.Ti-t;if(d>0.1)fix.push([phi/d,t])}else Hmass+=phi/dT}} // locali con fattore b: equivalente verso fuori
-  const kap=({leggera:80,media:165,pesante:260})[C.inerzia]||165;
+  const kap=({leggera:80,media:165,pesante:260})[inerziaEff(S)]||165,EE=etaEff(S);
   const have=R.rooms.reduce((s,x)=>s+x.c.have,0),n=have>0?R.rooms.reduce((s,x)=>s+x.c.have*x.c.n,0)/have:num(g.expo,1.3);
   const rp=recParams(S,R),p04=num(S.cald&&S.cald.par&&S.cald.par.p04)>0?num(S.cald.par.p04):rp.p04;
   const K=consCalc(S);
-  return {R,C,Af,Hair,Hmass,fix,sol:Object.fromEntries(K.months.map(m=>[m.key,m.Qsol])),Ca:5*Af,Cm:kap*Af/3.6,Cr:R.Vrad*1.163*1.4+10,Ham:9.1*2.5*Af,have,n,
+  return {R,C,Af,Hair,Hmass,fix,mesi:K.months.map(m=>[m.key,m.days,m.te]),sol:Object.fromEntries(K.months.map(m=>[m.key,m.Qsol])),Ca:5*Af,Cm:kap*Af/3.6,Cr:R.Vrad*1.163*1.4+10,Ham:9.1*2.5*Af,have,n,
     Pb:par4kW(p04)*0.95*1000,Tf:Math.min(num(g.Tm,70),num(g.TfMax,73)),dT:R.dTc,mcp:Math.max(R.tot,1000)/R.dTc*1.2,
-    phiInt:Af<=120?7.987*Af-0.0353*Af*Af:450,etaED:num(C.ee,0.93)*num(C.ed,0.95)};
+    phiInt:Af<=120?7.987*Af-0.0353*Af*Af:450,etaED:EE.ee*EE.ed};
 }
 // una stagione con un certo orario: set(h) = temperatura voluta, pres(h) = ci siete; ac = W del condizionatore
 function simRun(M,set,pres,{ac=0,cop=2.8,trace=false}={}){
   const {C}=M,dt=2/60;let Ta=16,Tm=16,Tw=16,on=false;
   let gas=0,heat=0,acEl=0,useH=0,ok19=0,sumOp=0,minOp=99,tr=null,reach=null,rose=false;const mGas={};
-  for(const [key,,days] of MESI){
-    const te0=num(C.tm[key],TM_DEF[key]),solW=(M.sol[key]||0)*1000/(days*8); // sole del mese sui muri, tra le 8 e le 16
+  for(const [key,days,te0] of M.mesi){
+    const solW=(M.sol[key]||0)*1000/(days*8); // sole del mese sui muri, tra le 8 e le 16
     for(let d=0;d<8;d++){const last=d===7;let gD=0,hD=0,aD=0,uH=0,o19=0,sOp=0;if(last&&trace&&key==='gen')tr=[];let start=null;
       for(let i=0;i<24/dt;i++){const h=i*dt,Te=te0+3*Math.cos(2*Math.PI*(h-15)/24),Ts=set(h);
         if(last&&key==='gen'&&start==null&&i>0&&Ts>set(h-dt)+0.5){start=h;rose=true} // inizio della prima salita del giorno
@@ -639,13 +713,13 @@ function simStrategie(S){
 
 /* ---------- stato ---------- */
 const KEY='riscaldamento-villetta-v2';
-const defG=()=>({mode:'norma',wallType:'',wallLay:[{m:'intonaco',s:1.5},{m:'forato',s:12},{m:'aria',s:6},{m:'forato',s:8},{m:'intonaco',s:1.5}],winType:'',ceilType:'',floorType:'',ceilUg:'',floorUg:'',upType:'p2f',dnType:'p2f',sdType:'nota',esp:'normale',n50:'',dUtb:0.10,Te:-5,epoca:'nonso',H:2.7,TuAbove:12,TuBelow:12,TuSide:10,tb:10,rip:10,marg:5,Tm:55,Tr:45,expo:1.3,Tmax:80,Pi:1.0,Psv:3.0,Vkw:11,Vover:'',Lcirc:40,TfMax:70,TrMax:55,calTe:'',calTf:'',calTr:'',kFix:'',dTp:10,scIdx:1});
+const defG=()=>({v3:1,comune:'',anno:'',muroTipo:'',muroSp:'',muroIso:'nonso',vetro:'',telaio:'legno',sopra:'',sotto:'',impAuto:true,condensa:'si',sonda:'no',GG:'',zona:'',mode:'norma',wallType:'',wallLay:[{m:'intonaco',s:1.5},{m:'forato',s:12},{m:'aria',s:6},{m:'forato',s:8},{m:'intonaco',s:1.5}],winType:'',ceilType:'',floorType:'',ceilUg:'',floorUg:'',upType:'p2f',dnType:'p2f',sdType:'nota',esp:'normale',n50:'',dUtb:0.10,Te:-5,epoca:'nonso',H:2.7,TuAbove:12,TuBelow:12,TuSide:10,tb:10,rip:10,marg:5,Tm:55,Tr:45,expo:1.3,Tmax:80,Pi:1.0,Psv:3.0,Vkw:11,Vover:'',Lcirc:40,TfMax:70,TrMax:55,calTe:'',calTf:'',calTr:'',kFix:'',dTp:10,scIdx:1});
 const defCald=()=>({par:{p02:'',p04:'',p05:'',p06:'',p33:'',p34:'',p35:'',inerzia:'',setMin:'',setMax:'',sondaAmb:'',modAmb:'',sondaEst:'',curva:'',offset:'',isteresi:''},letture:[]});
 let lid=1;
 let uid=1,rid=1;
 const newRad=(o={})=>Object.assign({id:rid++,tipo:'alu',n:10,h:600,col:3,acc:'22',len:1000,w:''},o);
 const newRoom=(o={})=>Object.assign({id:uid++,name:'Stanza',tipo:'Soggiorno',Ti:20,L:4,W:4,H:'',ext:'1L',nWin:1,winSize:1.7,nPF:0,pfSize:2.6,pfArea:'',pfU:'',comm:'',
-  floorTo:'unh',ceilTo:'unh',wallU:'',winU:'',floorU:'',ceilU:'',winArea:'',otherArea:'',otherU:'',ach:'',rads:[newRad()]},o);
+  floorTo:'',ceilTo:'',wallU:'',winU:'',floorU:'',ceilU:'',winArea:'',otherArea:'',otherU:'',ach:'',rads:[newRad()]},o);
 const example=()=>({g:defG(),rooms:[
   newRoom({name:'Soggiorno',L:5,W:4.5,ext:'2',nWin:2,winSize:1.7,rads:[newRad({n:12}),newRad({n:8})]}),
   newRoom({name:'Camera',tipo:'Camera',L:4,W:3.5,ext:'1S',nWin:1,winSize:1.7,rads:[newRad({n:10})]}),
@@ -654,10 +728,20 @@ const example=()=>({g:defG(),rooms:[
 let S;
 try{const raw=localStorage.getItem(KEY);S=raw?JSON.parse(raw):example()}catch(e){S=example()}
 if(!S||!S.g||!Array.isArray(S.rooms))S=example();
-function normalize(){S.g=Object.assign(defG(),S.g);if(!Array.isArray(S.g.wallLay))S.g.wallLay=defG().wallLay;S.rooms.forEach(r=>{if(!Array.isArray(r.rads))r.rads=[];if(r.nPF==null)r.nPF=0;if(!(r.pfSize>0))r.pfSize=2.6;if(r.pfArea==null)r.pfArea='';if(r.pfU==null)r.pfU='';if(r.comm==null)r.comm=''});
+function normalize(){const old=!(S.g&&S.g.v3);S.g=Object.assign(defG(),S.g);
+  if(old){const g=S.g; // dati salvati con la versione precedente: li porto alle domande semplici
+    const byTe={'-8':'Torino','-10':'Cuneo','-5':'Milano','0':'Firenze','2':'Napoli','5':'Palermo'};if(!g.comune&&byTe[String(g.Te)])g.comune=byTe[String(g.Te)];
+    const up={p2f:'chiuso',p1:'chiuso',p2:'chiuso',p3:'chiuso',stn:'sottotetto',stv:'sottotetto',sti:'sottotettoI'},dn={p2f:'chiuso',p1:'chiuso',p2:'chiuso',p3:'chiuso',int:'cantina',intf:'cantina'};
+    if(!g.sopra&&up[g.upType])g.sopra=up[g.upType];if(!g.sotto&&dn[g.dnType])g.sotto=dn[g.dnType];
+    (S.rooms||[]).forEach(r=>{if(r.floorTo==='unh')r.floorTo='';if(r.ceilTo==='unh')r.ceilTo=''});
+    g.sonda=(S.posto&&S.posto.cfg==='B')?'si':'no';g.condensa=num(g.TrMax,55)<=60?'si':'no';g.impAuto=true;
+    if(S.cons){const c=S.cons;if(String(c.ore)==='24')c.ore='';if(c.inerzia==='media')c.inerzia='';
+      if(num(c.ee)===0.93)c.ee='';['erg','ed','egn'].forEach(k=>{if(num(c[k])===0.95)c[k]=''});
+      if(c.tm&&Object.keys(TM_DEF).every(k=>num(c.tm[k])===TM_DEF[k]))c.tm={}}
+    g.v3=1}if(!Array.isArray(S.g.wallLay))S.g.wallLay=defG().wallLay;S.rooms.forEach(r=>{if(!Array.isArray(r.rads))r.rads=[];if(r.nPF==null)r.nPF=0;if(!(r.pfSize>0))r.pfSize=2.6;if(r.pfArea==null)r.pfArea='';if(r.pfU==null)r.pfU='';if(r.comm==null)r.comm=''});
   S.cald=Object.assign(defCald(),S.cald||{});S.cald.par=Object.assign(defCald().par,S.cald.par||{});if(!Array.isArray(S.cald.letture))S.cald.letture=[];
   lid=Math.max(0,...S.cald.letture.map(l=>l.id||0))+1;if(!S.view)S.view='calc';
-  S.orari=Object.assign(defOrari(),S.orari||{});S.cons=Object.assign(defCons(),S.cons||{});S.cons.tm=Object.assign({},TM_DEF,S.cons.tm||{});S.cons.bol=Object.assign(defCons().bol,S.cons.bol||{});
+  S.orari=Object.assign(defOrari(),S.orari||{});S.cons=Object.assign(defCons(),S.cons||{});S.cons.tm=Object.assign({},S.cons.tm||{});if(!S.ui)S.ui='semplice';S.cons.bol=Object.assign(defCons().bol,S.cons.bol||{});
   S.posto=Object.assign({cfg:'A',done:{},ck:{Te:'',setM:''}},S.posto||{});S.posto.done=S.posto.done||{};S.posto.ck=Object.assign({Te:'',setM:''},S.posto.ck||{});
   uid=Math.max(0,...S.rooms.map(r=>r.id||0))+1;rid=Math.max(0,...S.rooms.flatMap(r=>r.rads.map(a=>a.id||0)))+1}
 normalize();
@@ -670,10 +754,9 @@ const fld=(label,key,val,step,attr='data-k')=>`<label>${label}<input type="numbe
 function renderG(){
   document.getElementById('gForm').innerHTML=G_FIELDS.map(([k,l,s])=>`<label>${l}<input type="number" step="${s}" data-g="${k}" value="${S.g[k]}"></label>`).join('');
   document.getElementById('epoca').innerHTML=Object.entries(EPOCHE).map(([k,v])=>`<option value="${k}"${k===S.g.epoca?' selected':''}>${v.n}</option>`).join('');
-  document.getElementById('comune').innerHTML=COMUNI.map(([n,t])=>`<option value="${t}"${t!==''&&t===S.g.Te?' selected':''}>${n}${t!==''?' ('+t+' °C)':''}</option>`).join('');
-  document.querySelectorAll('input[data-g="Te"],input[data-g="Tm"],input[data-g="Tr"],input[data-g="TfMax"],input[data-g="TrMax"]').forEach(i=>i.value=S.g[i.dataset.g]);
-  const sp=document.querySelector('select[data-g="dTp"]');if(sp)sp.value=String(S.g.dTp);
-  const md=document.querySelector('select[data-g="mode"]');if(md)md.value=S.g.mode==='tarato'?'tarato':'norma';
+  document.getElementById('comune').innerHTML=[['','altro comune (scrivo io temperatura e gradi giorno)'],...Object.entries(COMUNI2).map(([n,c])=>[n,`${n} (${c.Te} °C, zona ${c.z})`])].map(([v,t])=>`<option value="${v}"${v===S.g.comune?' selected':''}>${t}</option>`).join('');
+  document.querySelectorAll('#viewCalc [data-g]').forEach(el=>{if(el.closest('#gForm')||el.closest('#strCard'))return;const k=el.dataset.g;
+    if(k==='impAuto')el.value=S.g.impAuto===false?'0':'1';else if(k==='mode')el.value=S.g.mode==='tarato'?'tarato':'norma';else if(el.id!=='comune')el.value=S.g[k]??''});
   renderStr();
 }
 function radHTML(a){
@@ -712,38 +795,37 @@ function roomHTML(r){
   <h3 style="font-size:13px;color:var(--mut);margin:12px 0 0">Radiatori in questa stanza</h3>
   ${r.rads.map(radHTML).join('')}
   <div class="row" style="margin-top:8px"><button class="x" data-addrad="${r.id}">+ Radiatore</button><button class="x" data-dup="${r.id}">Duplica stanza</button><button class="x" data-del="${r.id}">Elimina stanza</button></div>
-  <details class="adv"><summary>Dettagli (se li conosci)</summary><div class="grid" style="margin-top:8px">
+  <details class="adv adv-only"><summary>Valori tecnici della stanza (solo se è diversa dalle altre)</summary><div class="grid" style="margin-top:8px">
    ${fld('Ricambi aria (1/h)','ach',r.ach,0.1)}${fld('U parete esterna','wallU',r.wallU,0.05)}
    ${fld('Area finestre (m²)','winArea',r.winArea,0.1)}${fld('U finestre','winU',r.winU,0.05)}
    ${fld('Area portefinestre (m²)','pfArea',r.pfArea,0.1)}${fld('U portefinestre','pfU',r.pfU,0.05)}
-   <label>Pavimento verso<select data-k="floorTo">${optsS([['unh','piano sotto freddo'],['ground','terreno'],['heated','locale riscaldato']],r.floorTo)}</select></label>${fld('U pavimento','floorU',r.floorU,0.05)}
-   <label>Soffitto verso<select data-k="ceilTo">${optsS([['unh','piano sopra freddo'],['out','tetto / esterno'],['heated','locale riscaldato']],r.ceilTo)}</select></label>${fld('U soffitto','ceilU',r.ceilU,0.05)}
+   <label>Pavimento verso<select data-k="floorTo">${optsS([['','come la casa'],['unh','locale non riscaldato'],['ground','terreno'],['heated','locale riscaldato'],['out','esterno']],r.floorTo||'')}</select></label>${fld('U pavimento','floorU',r.floorU,0.05)}
+   <label>Soffitto verso<select data-k="ceilTo">${optsS([['','come la casa'],['unh','locale non riscaldato'],['out','tetto / esterno'],['heated','locale riscaldato']],r.ceilTo||'')}</select></label>${fld('U soffitto','ceilU',r.ceilU,0.05)}
    ${fld('Pareti verso vani freddi (m²)','otherArea',r.otherArea,0.1)}
-  </div><p class="note" style="margin:6px 0 0">Lascia vuoto quello che non sai: vale il valore automatico (U dall'epoca della casa, U portefinestre come le finestre).</p></details></details>`}
+  </div><p class="note" style="margin:6px 0 0">Lascia vuoto quello che non sai: vale il valore automatico, calcolato dalle risposte della scheda 1.</p></details></details>`}
 // stanze comunicanti: il legame vale nei due sensi (se l'altra stanza non ne ha già uno)
 function setComm(r,v){
   const old=S.rooms.find(x=>x.id==r.comm);if(old&&old.comm==r.id)old.comm='';
   r.comm=v===''?'':parseInt(v);
   const nw=S.rooms.find(x=>x.id==r.comm);if(nw&&(nw.comm===''||nw.comm==null))nw.comm=r.id}
 // scheda 2: strutture della casa e locali non riscaldati vicini (dati per il calcolo a norma)
-function renderStr(){const g=S.g,E=envU(g),P=EPOCHE[g.epoca]||EPOCHE.nonso,el=document.getElementById('strCard');if(!el)return;
+function renderStr(){const g=S.g,E=envU(g),P=EPOCHE[epocaEff(g)]||EPOCHE.nonso,el=document.getElementById('strCard');if(!el)return;
   const ent=(obj,f)=>Object.entries(obj).map(([k,v])=>[k,f(v)]);
   const bu=v=>v.n+(v.b!=null?` (b ${r1(v.b)})`:'');
   const lay=g.wallType==='strat'?`<div class="wide"><div class="tw"><table style="font-size:13px"><tr><th>Strato, da dentro a fuori</th><th>cm</th><th></th></tr>${(g.wallLay||[]).map((l,i)=>`<tr><td style="white-space:normal;text-align:left"><select data-lay="${i}" data-lf="m">${optsS(ent(MAT,v=>v.n),l.m)}</select></td><td><input type="number" step="0.5" data-lay="${i}" data-lf="s" value="${l.s??''}" style="width:72px"></td><td><button class="x" data-dellay="${i}">×</button></td></tr>`).join('')}</table></div>
     <div class="row" style="margin-top:6px"><button class="x" data-addlay="1">+ Strato</button><span class="note">U = <b id="strU">${r1(strataU(g.wallLay))}</b> W/m²K (UNI EN ISO 6946, Rsi 0,13 e Rse 0,04)</span></div></div>`:'';
   const slab=(key,own,lab)=>`<label class="wide">${lab}<select data-g="${key}">${optsS([['',`come l'epoca (U ${r1(P.slab)})`],...ent(SOLAI,v=>`${v.n} (U ${r1(key==='ceilType'?v.Uup:v.Udn)})`),['U','U scritta da me']],g[key])}</select></label>${g[key]==='U'?`<label>U (W/m²K)<input type="number" step="0.05" data-g="${own}" value="${g[own]??''}"></label>`:''}`;
-  el.innerHTML=`<h2>2. Strutture e locali vicini</h2>
+  el.innerHTML=`<h2>Strutture: valori tecnici</h2><p class="note" style="margin-top:0">Qui scegli la struttura esatta se la conosci: vale più delle risposte della scheda 1. Lascia «come…» per usare le risposte.</p>
   <div class="grid">
-   <label class="wide">Muro esterno<select data-g="wallType">${optsS([['',`come l'epoca (U ${r1(P.wall)})`],...ent(MURI,v=>`${v.n} (U ${r1(v.U)})`),['strat','la mia stratigrafia']],g.wallType)}</select></label>
+   <label class="wide">Muro esterno<select data-g="wallType">${optsS([['',`come nelle risposte (U ${r1(muroU(g)?muroU(g).U:P.wall)})`],...ent(MURI,v=>`${v.n} (U ${r1(v.U)})`),['strat','la mia stratigrafia']],g.wallType)}</select></label>
    ${lay}
-   <label class="wide">Finestre e portefinestre<select data-g="winType">${optsS([['',`come l'epoca (U ${r1(P.win)})`],...ent(FIN,v=>`${v.n} (U ${r1(v.U)})`)],g.winType)}</select></label>
+   <label class="wide">Finestre e portefinestre<select data-g="winType">${optsS([['',`come nelle risposte (U ${r1(finU(g)?finU(g).U:P.win)})`],...ent(FIN,v=>`${v.n} (U ${r1(v.U)})`)],g.winType)}</select></label>
    ${slab('ceilType','ceilUg','Solaio verso il piano sopra')}
    ${slab('floorType','floorUg','Solaio verso il piano sotto')}
-   <label class="wide">Sopra c'è<select data-g="upType">${optsS(ent(BU,bu),g.upType)}</select></label>
-   <label class="wide">Sotto c'è<select data-g="dnType">${optsS(ent(BU,bu),g.dnType)}</select></label>
+   <label class="wide">Sopra: tipo di locale (se «non so» nella scheda 1)<select data-g="upType">${optsS(ent(BU,bu),g.upType)}</select></label>
+   <label class="wide">Sotto: tipo di locale (se «non so» nella scheda 1)<select data-g="dnType">${optsS(ent(BU,bu),g.dnType)}</select></label>
    <label class="wide">Vani laterali non riscaldati<select data-g="sdType">${optsS(ent(BU,bu),g.sdType)}</select></label>
-   <label class="wide">Esposizione al vento<select data-g="esp">${optsS(ent(ESP,v=>v.n),g.esp)}</select></label>
-   <label>Tenuta all'aria n50 (1/h)<input type="number" step="0.5" data-g="n50" value="${g.n50??''}" placeholder="${r1(N50[g.epoca]||7)} dall'epoca"></label>
+   <label>Tenuta all'aria n50 (1/h)<input type="number" step="0.5" data-g="n50" value="${g.n50??''}" placeholder="${r1(N50[epocaEff(g)]||7)} dall'epoca"></label>
    <label>Ponti termici ΔU (W/m²K)<input type="number" step="0.01" data-g="dUtb" value="${g.dUtb??''}" placeholder="0,10"></label>
   </div>
   <p class="note" id="strNote">In uso: muro U ${r1(E.wall.U)} (${E.wall.src}); finestre U ${r1(E.win.U)}; solaio sopra U ${r1(E.ceil.U)}; solaio sotto U ${r1(E.floor.U)} W/m²K. I valori dell'elenco sono tipici: verificali sulla casa vera. Il fattore b dice quanto il locale accanto è freddo: 0 = come la stanza, 1 = come fuori. Per una stanza diversa dalle altre scrivi la U nei suoi «Dettagli».</p>`}
@@ -789,9 +871,23 @@ function curveSVG(pts,lim){
   for(let x=Math.ceil(x0/5)*5;x<=x1;x+=5)g+=`<line y1="${T}" y2="${H-B}" x1="${X(x)}" x2="${X(x)}" stroke="currentColor" opacity=".12"/><text x="${X(x)}" y="${H-B+14}" text-anchor="middle">${x}</text>`;
   const path=pts.map((p,i)=>(i?'L':'M')+X(p[0]).toFixed(1)+' '+Y(p[1]).toFixed(1)).join(' ');
   return `<svg viewBox="0 0 ${W} ${H}" width="100%" style="max-width:640px;color:var(--ink)">${g}${lim?`<line x1="${L}" x2="${W-R}" y1="${Y(lim)}" y2="${Y(lim)}" stroke="var(--bad)" stroke-dasharray="5 4"/><text x="${L+4}" y="${Y(lim)-4}" style="fill:var(--bad)">limite ${lim} °C</text>`:''}<path d="${path}" fill="none" stroke="var(--acc)" stroke-width="2.5"/><text x="${W-R}" y="${H-4}" text-anchor="end">temperatura esterna °C (orizzontale) → mandata °C (verticale)</text></svg>`}
+// impianto automatico: mandata, ritorno e salto dal piano «per condensare» (come il pulsante «Usa…», ma da solo)
+function applyAuto(){const g=S.g;if(g.impAuto===false)return;
+  g.TrMax=g.condensa==='no'?Math.max(30,num(g.TfMax,73)-10):55;
+  const R0=sysCalc(S),p=condPlan(S,R0);let Tm,Tr,d;
+  if(p&&!p.fail){Tm=p.best.Tf;Tr=p.best.Tr;d=p.best.dT}
+  else{Tm=Math.round(num(g.TfMax,73));d=[5,10,15,20].find(x=>Tm-x<=g.TrMax)||20;Tr=Tm-d}
+  g.Tm=Tm;g.Tr=Tr;g.dTp=d;S.posto.cfg=g.sonda==='si'?'B':'A';
+  ['Tm','Tr','TrMax'].forEach(k=>{const el=document.querySelector(`#viewCalc input[data-g="${k}"]`);if(el&&document.activeElement!==el)el.value=g[k]});
+  const sp=document.querySelector('#viewCalc select[data-g="dTp"]');if(sp)sp.value=String(g.dTp)}
+function autoNotes(R){const g=S.g,E=envU(g),K=clima(g),HS=house(g),bb=t=>BU[t]&&BU[t].b!=null?`b ${r1(BU[t].b)}`:'temperatura nota';
+  const cn=document.getElementById('casaNote');
+  if(cn)cn.innerHTML=`<b>Calcolati dall'app:</b> temperatura di progetto ${f0(K.Te)} °C, zona ${K.z}, ${f0(K.GG)} gradi giorno · epoca «${(EPOCHE[epocaEff(g)]||{}).n||''}» · muro U ${r1(E.wall.U)} (${E.wall.src}) · finestre U ${r1(E.win.U)} (${E.win.src}) · sopra ${HS.ceilTo==='heated'?'riscaldato':HS.ceilTo==='out'?'tetto':bb(HS.upType)}, sotto ${HS.floorTo==='heated'?'riscaldato':HS.floorTo==='ground'?'terreno':bb(HS.dnType)} · aria: tenuta n50 ${r1(E.n50)}, esposizione ${(ESP[g.esp]||ESP.normale).n} · inerzia ${inerziaEff(S)}.`;
+  const im=document.getElementById('impNote');
+  if(im)im.innerHTML=`<b>${g.impAuto===false?'Scritti da te':'Calcolati dall\'app'}:</b> mandata/ritorno di progetto ${f0(num(g.Tm))}/${f0(num(g.Tr))} °C, salto ${f0(num(g.dTp))} K (par. 34 = ${DT_PAR34.indexOf(num(g.dTp))}), ritorno massimo ${f0(num(g.TrMax))} °C, set massimo di mandata ${f0(Math.min(num(g.TfMax,73),num(g.TrMax,55)+num(g.dTp,10)))} °C, pagina «Sul posto» in configurazione ${g.sonda==='si'?'B (con sonda)':'A (senza sonda)'}.`}
 function renderOut(){
-  save();
-  const R=sysCalc(S),g=S.g;
+  applyAuto();save();
+  const R=sysCalc(S),g=S.g;autoNotes(R);
   document.querySelectorAll('[data-rest]').forEach(el=>{
     for(const r of S.rooms){const a=r.rads.find(x=>x.id==el.dataset.rest);if(a){el.textContent=(Math.round(radW(a))||'—')+' W';break}}});
   if(!R.rooms.length){document.getElementById('out').innerHTML='';document.getElementById('ans').innerHTML='';return}
@@ -989,18 +1085,18 @@ function renderRel(){
   const f2=x=>isFinite(x)?x.toLocaleString('it-IT',{minimumFractionDigits:2,maximumFractionDigits:2}):'—';
   const B=t=>BU[t]||BU.p2f;
   const bTxt=(t,Tn)=>B(t).b!=null?`b = ${f2(B(t).b)} → θu = ${f1(20-B(t).b*(20-Te))} °C`:`θu = ${f1(num(Tn,12))} °C (nota)`;
-  const com=(COMUNI.find(c=>c[1]!==''&&c[1]===g.Te)||[])[0];
+  const com=g.comune||'',KC=clima(g),HS=house(g);
   const tr=(a,b,c)=>`<tr><td style="text-align:left;white-space:normal">${a}</td><td>${b}</td><td style="text-align:left;white-space:normal">${c}</td></tr>`;
   const dUv=(g.dUtb===''||g.dUtb==null)?0.1:num(g.dUtb);
   const dati=`<div class="card"><h2>1. Dati e ipotesi</h2><div class="tw"><table>
-   ${tr('Temperatura esterna di progetto θe',f1(Te)+' °C',(com?com+'. ':'')+"Verifica il valore del tuo comune e dell'altitudine nella UNI 10349-2.")}
+   ${tr('Temperatura esterna di progetto θe',f1(Te)+' °C',(com?com+', ':'')+`zona ${KC.z}, ${f0(KC.GG)} gradi giorno. Verifica il valore del tuo comune e dell'altitudine nella UNI 10349-2.`)}
    ${tr('Muro esterno','U '+f2(E.wall.U)+' W/m²K',E.wall.src)}
    ${tr('Finestre e portefinestre','U '+f2(E.win.U)+' W/m²K',E.win.src)}
    ${tr('Solaio verso sopra','U '+f2(E.ceil.U)+' W/m²K',E.ceil.src)}
    ${tr('Solaio verso sotto','U '+f2(E.floor.U)+' W/m²K',E.floor.src)}
    ${tr('Ponti termici','ΔU '+f2(dUv)+' W/m²K','Sommata alla U di muri e solai (metodo semplificato della UNI EN 12831-1).')}
-   ${tr('Locale sopra',bTxt(g.upType,g.TuAbove),B(g.upType).n+'. Fattore b tipico (UNI/TS 11300-1); θu calcolata per una stanza a 20 °C.')}
-   ${tr('Locale sotto',bTxt(g.dnType,g.TuBelow),B(g.dnType).n+'.')}
+   ${tr('Sopra il piano',HS.ceilTo==='unh'?bTxt(HS.upType,g.TuAbove):HS.ceilTo==='out'?'tetto':'riscaldato',(SOPRA[g.sopra]?SOPRA[g.sopra].n:B(HS.upType).n)+'. Fattore b tipico (UNI/TS 11300-1); θu calcolata per una stanza a 20 °C.')}
+   ${tr('Sotto il piano',HS.floorTo==='unh'?bTxt(HS.dnType,g.TuBelow):HS.floorTo==='ground'?'terreno (10 °C)':'riscaldato',(SOTTO[g.sotto]?SOTTO[g.sotto].n:B(HS.dnType).n)+'.')}
    ${tr('Vani laterali non riscaldati',bTxt(g.sdType,g.TuSide),B(g.sdType).n+'.')}
    ${tr("Tenuta all'aria",`n50 = ${f1(E.n50)} 1/h`,E.n50src+'. Infiltrazioni = 2·V·n50·e (UNI EN 12831); esposizione: '+(ESP[g.esp]||ESP.normale).n+'.')}
    ${tr('Ricambio minimo','0,5 / 1,5 1/h',"Stanze 0,5 ricambi all'ora; bagno e cucina 1,5. Vale il maggiore tra minimo e infiltrazioni.")}
@@ -1029,10 +1125,11 @@ function renderRel(){
     <tr><td style="text-align:left"><b>Totale piano</b></td><td><b>${f0(R.tot)}</b></td><td></td><td></td><td></td></tr></table></div>
     <p class="note">Superficie ${f1(R.area)} m², ${f0(R.wm2)} W/m². Potenza minima del generatore in riscaldamento ${f1(R.kW)} kW (carico + ${f0(num(g.marg))} % di margine).</p></div>`;
   const miss=[];
-  if(!g.wallType)miss.push("Muro esterno: scegli la struttura vera o scrivi la stratigrafia (ora è il valore tipico dell'epoca).");
-  if(!g.winType)miss.push("Finestre: scegli il tipo di vetro e telaio (ora è il valore tipico dell'epoca).");
-  if(!g.ceilType||!g.floorType)miss.push("Solai sopra e sotto: scegli com'è fatto il solaio.");
-  miss.push(`Locali sopra e sotto: controlla cosa c'è davvero (ora: sopra «${B(g.upType).n}», sotto «${B(g.dnType).n}»). Pesano molto sul carico.`);
+  if(!num(g.anno))miss.push('Anno di costruzione della casa (scheda 1).');
+  if(!g.wallType&&!g.muroTipo)miss.push('Muri: com\'è fatto il muro e quanto è spesso (scheda 1).');else if(!g.wallType&&!(num(g.muroSp)>0))miss.push('Muri: misura lo spessore del muro a una finestra (scheda 1).');
+  if(!g.winType&&!g.vetro)miss.push('Finestre: tipo di vetro e telaio (scheda 1).');
+  if(!g.sopra||!g.sotto)miss.push('Cosa c\'è sopra e sotto il piano (scheda 1): pesa molto sul carico.');
+  if(!g.ceilType||!g.floorType)miss.push('Solai sopra e sotto: se sai com\'è fatto il solaio sceglilo nei valori tecnici (vista avanzata).');
   if(!(num(g.n50)>0))miss.push("Tenuta all'aria: stimata dall'epoca; se gli infissi sono nuovi o molto vecchi correggi n50.");
   miss.push("Temperatura esterna di progetto: verifica il valore del comune e dell'altitudine nella UNI 10349-2.");
   R.rooms.forEach(x=>{const r=x.r,nm=r.name||'Stanza';
@@ -1052,7 +1149,7 @@ function renderCons(){
   const inp=(k,lab,step,ph)=>`<label>${lab}<input type="number" step="${step}" data-cn="${k}" value="${C[k]??''}"${ph?` placeholder="${ph}"`:''}></label>`;
   const sel=(k,lab,list,cls)=>`<label${cls?` class="${cls}"`:''}>${lab}<select data-cn="${k}">${optsS(list,C[k])}</select></label>`;
   const rows=K.months.map(m=>`<tr><td style="text-align:left">${m.name}</td>
-    <td><input type="number" step="0.1" data-tm="${m.key}" value="${C.tm[m.key]??''}" style="width:64px"></td>
+    <td><input type="number" step="0.1" data-tm="${m.key}" value="${m.own?C.tm[m.key]:''}" placeholder="${r1(m.teAuto)}" style="width:64px"></td>
     <td>${f0(m.Qht)}</td><td>${f0(m.Qgn)}</td><td>${f0(m.Qnd)}</td><td>${f0(m.gasN)}</td>
     <td><b class="${m.short?'warn':''}">${f0(m.gasI)}</b>${m.short?' *':''}</td><td>${f0(m.gasW+m.gasK)}</td><td><b>${f0(m.tot)}</b></td>
     <td><input type="number" step="1" data-bol="${m.key}" value="${C.bol[m.key]??''}" style="width:70px"></td></tr>`).join('');
@@ -1060,26 +1157,28 @@ function renderCons(){
   let diag='';
   if(B){const r=B.bol/B.calc,rc=B.bol/B.cap;
     diag=`<div class="card"><h2>Confronto con le bollette</h2><p>Nei ${B.n} mesi scritti: bollette <b>${f0(B.bol)} m³</b>, calcolo con le vostre ore <b>${f0(B.calc)} m³</b> (le bollette sono il ${f0(r*100)} % del calcolo), riscaldamento continuo a norma ${f0(B.norm)} m³. Il massimo che i radiatori inseriti possono bruciare nelle vostre ore, più acqua calda e cucina, è <b>${f0(B.cap)} m³</b>.</p>
-    <ul class="l">${rc>1.15?`<li class="bad">Le bollette superano di ${f0((rc-1)*100)} % quello che i radiatori inseriti possono consumare in ${f0(num(C.ore,24))} ore al giorno: il gas va anche altrove (altri radiatori o piani, più ore di accensione, un altro apparecchio) oppure le letture non sono vere.</li>`:''}
+    <ul class="l">${rc>1.15?`<li class="bad">Le bollette superano di ${f0((rc-1)*100)} % quello che i radiatori inseriti possono consumare in ${f0(K.ore)} ore al giorno: il gas va anche altrove (altri radiatori o piani, più ore di accensione, un altro apparecchio) oppure le letture non sono vere.</li>`:''}
      ${r<0.8?'<li class="warn">Le bollette sono più basse del calcolo: la casa reale disperde meno dei dati tipici (muri, finestre, locali vicini) o state più freddi di 20 °C.</li>':''}
      ${r>=0.8&&rc<=1.15?'<li class="ok">Calcolo e bollette sono vicini: i dati della casa sono plausibili.</li>':''}
      ${C.bolV!=='vere'?'<li class="note">Controlla in bolletta se i consumi sono «effettivi» (letti) o «stimati»: solo quelli letti valgono per il confronto.</li>':''}</ul></div>`}
   document.getElementById('viewCons').innerHTML=`<div class="card"><h2>Consumi della stagione</h2>
-   <p class="note">Fabbisogno di calore mese per mese secondo UNI/TS 11300-1 (dispersioni del calcolo a norma alla temperatura media del mese, meno apporti interni e solari utilizzati), poi gas con i rendimenti dell'impianto secondo UNI/TS 11300-2. Stagione della zona E dal 15 ottobre al 15 aprile. ${R.norma?'':'Attenzione: il calcolo è «tarato», quindi le dispersioni sono corrette con il funzionamento reale. '}Valori tipici dove mancano i dati: è una stima per confrontarsi con le bollette.</p>
+   <p class="note">Fabbisogno di calore mese per mese secondo UNI/TS 11300-1 (dispersioni del calcolo a norma alla temperatura media del mese, meno apporti interni e solari utilizzati), poi gas con i rendimenti dell'impianto secondo UNI/TS 11300-2. Stagione e medie mensili dal comune (zona ${K.clima.z}, ${f0(K.clima.GG)} gradi giorno). Le ore di accensione vengono dalle fasce della pagina «Orari» (${f0(K.ore)} al giorno). ${R.norma?'':'Attenzione: il calcolo è «tarato», quindi le dispersioni sono corrette con il funzionamento reale. '}Valori tipici dove mancano i dati: è una stima per confrontarsi con le bollette.</p>
    <div class="grid" style="margin-top:8px">
-    ${inp('ore','Ore di accensione al giorno',1)}
-    ${sel('inerzia','Inerzia della casa',[['leggera','leggera'],['media','media'],['pesante','pesante (muri spessi)']])}
-    ${inp('ee','Rendimento di emissione (radiatori)',0.01)}${inp('erg','Rendimento di regolazione',0.01)}
-    ${inp('ed','Rendimento di distribuzione',0.01)}${inp('egn','Rendimento della caldaia (PCI)',0.01)}
-    ${sel('acs','Acqua calda sullo stesso contatore',[['si','sì'],['no','no']])}${inp('Sacs','Superficie della casa per l\'acqua calda (m²)',1,f0(R.area))}
-    ${inp('cuc','Cucina a gas (m³ al mese)',0.5)}${sel('bolV','I m³ delle bollette sono',[['nonso','non so'],['vere','letture vere'],['stimate','stimati']])}
+    ${sel('acs','Acqua calda sullo stesso contatore',[['si','sì'],['no','no']])}${inp('cuc','Cucina a gas (m³ al mese)',0.5)}
+    ${sel('bolV','I m³ delle bollette sono',[['nonso','non so'],['vere','letture vere'],['stimate','stimati']])}
+    <div class="wide adv-only"><div class="grid">
+    ${inp('ore','Ore di accensione al giorno',1,f0(oreFasce(S))+' dalle fasce')}
+    ${sel('inerzia','Inerzia della casa',[['','automatica (dal muro)'],['leggera','leggera'],['media','media'],['pesante','pesante (muri spessi)']])}
+    ${inp('ee','Rendimento di emissione',0.01,f2x(etaAuto(S).ee))}${inp('erg','Rendimento di regolazione',0.01,f2x(etaAuto(S).erg))}
+    ${inp('ed','Rendimento di distribuzione',0.01,f2x(etaAuto(S).ed))}${inp('egn','Rendimento della caldaia (PCI)',0.01,f2x(etaAuto(S).egn))}
+    ${inp('Sacs','Superficie per l\'acqua calda (m²)',1,f0(R.area))}</div></div>
    </div>
-   <p class="note" style="margin-top:6px">Rendimento totale ${f2x(K.etaG)} (emissione × regolazione × distribuzione × caldaia, valori tipici della UNI/TS 11300-2: caldaia a condensazione con ritorni sui 50 °C ≈ 0,95, con la curva climatica e ritorni bassi fino a 0,98). Apporti interni ${f0(K.phiInt)} W (UNI/TS 11300-1). Costante di tempo della casa ${f0(K.tau)} ore. Acqua calda ${f0(K.Vw)} litri al giorno a 40 °C. Le finestre guardano dove scrivi nei «Dettagli» di ogni stanza.</p></div>
+   <p class="note" style="margin-top:6px">Rendimento totale ${f2x(K.etaG)} (emissione ${f2x(K.EE.ee)} × regolazione ${f2x(K.EE.erg)} × distribuzione ${f2x(K.EE.ed)} × caldaia ${f2x(K.EE.egn)}: valori tipici della UNI/TS 11300-2 ricavati da sonda esterna e ritorno di progetto). Spesa della stagione con i vostri orari: circa <b>${f0(K.tot.tot*num(S.orari.pGas,1.3))} €</b> a ${f2x(num(S.orari.pGas,1.3))} €/m³ (il prezzo si cambia nella pagina «Orari»). Apporti interni ${f0(K.phiInt)} W (UNI/TS 11300-1). Costante di tempo della casa ${f0(K.tau)} ore. Acqua calda ${f0(K.Vw)} litri al giorno a 40 °C. Le finestre guardano dove scrivi nei «Dettagli» di ogni stanza.</p></div>
   <div class="card"><h2>Mese per mese</h2><div class="tw"><table class="st">
    <tr><th>Mese</th><th>Media fuori °C</th><th>Dispersioni kWh</th><th>Apporti kWh</th><th>Calore che serve kWh</th><th>Gas a norma, sempre acceso m³</th><th>Gas con le vostre ore m³</th><th>Acqua calda e cucina m³</th><th>Totale m³</th><th>Bolletta m³</th></tr>
    ${rows}
    <tr><td style="text-align:left"><b>Stagione</b></td><td>${f0(K.GG)} GG</td><td>${f0(T.Qht)}</td><td>${f0(T.Qgn)}</td><td>${f0(T.Qnd)}</td><td>${f0(T.gasN)}</td><td><b>${f0(T.gasI)}</b></td><td>${f0(T.gasW+T.gasK)}</td><td><b>${f0(T.tot)}</b></td><td>${B?f0(B.bol):''}</td></tr></table></div>
-   <p class="note">«Gas a norma» è il consumo per tenere tutte le stanze inserite alla loro temperatura giorno e notte. «Con le vostre ore» applica la riduzione per riscaldamento intermittente (UNI EN ISO 13790) e il limite dei radiatori: * = in quel mese i radiatori inseriti, in ${f0(num(C.ore,24))} ore al giorno, non riescono a dare tutto il calore che serve (al massimo ${f1(K.capKW)} kW), quindi la casa resta sotto i 20 °C. Le medie mensili sono quelle tipiche di Torino: correggile con quelle del tuo comune (UNI 10349-1).</p></div>
+   <p class="note">«Gas a norma» è il consumo per tenere tutte le stanze inserite alla loro temperatura giorno e notte. «Con le vostre ore» applica la riduzione per riscaldamento intermittente (UNI EN ISO 13790) e il limite dei radiatori: * = in quel mese i radiatori inseriti, in ${f0(num(C.ore,24))} ore al giorno, non riescono a dare tutto il calore che serve (al massimo ${f1(K.capKW)} kW), quindi la casa resta sotto i 20 °C. Le medie mensili sono ricavate dai gradi giorno del comune: se le conosci (UNI 10349-1) scrivile, valgono di più.</p></div>
   ${diag}`}
 const f2x=x=>isFinite(x)?x.toLocaleString('it-IT',{minimumFractionDigits:2,maximumFractionDigits:2}):'—';
 /* ---------- pagina «Orari»: simulazione ora per ora della stagione ---------- */
@@ -1106,7 +1205,7 @@ function renderOrari(){
     const tr=X.out.filter(o=>o.trace);
     res=`<div class="card"><h2>Risultati della stagione</h2><div class="tw"><table class="st"><tr><th>Orario</th><th>Gas m³</th><th>Spesa €</th><th>Rispetto ai vostri orari €</th><th>Percepita quando ci siete °C</th><th>Tempo sopra 19 °C</th><th>Minimo percepito in gennaio °C</th><th>Ore per arrivare a 19 °C (gennaio)</th></tr>${rows}</table></div>
      <p class="note">«Percepita» è la media tra aria e muri: è quella che senti addosso. Le colonne sul comfort contano solo le ore delle vostre fasce, quando siete in casa.</p>
-     ${(()=>{const C=S.cons,u=base.mGas,K=consCalc(S),righe=MESI.map(([k,nm])=>{const b=C.bol[k];const extra=K.months.find(m=>m.key===k);const tot=u[k]+(extra?extra.gasW+extra.gasK:0);return `<tr><td style="text-align:left">${nm}</td><td>${f0(u[k])}</td><td>${f0(tot)}</td><td>${b===''||b==null?'—':f0(num(b))}</td></tr>`}).join('');return `<h3 style="font-size:14px;margin:12px 0 4px">I vostri orari mese per mese</h3><div class="tw"><table class="st"><tr><th>Mese</th><th>Riscaldamento m³</th><th>Con acqua calda e cucina m³</th><th>Bolletta m³</th></tr>${righe}</table></div><p class="note">Le bollette si scrivono nella pagina «Consumi».</p>`})()}</div>
+     ${(()=>{const C=S.cons,u=base.mGas,K=consCalc(S),righe=K.months.map(({key:k,name:nm})=>{const b=C.bol[k];const extra=K.months.find(m=>m.key===k);const tot=u[k]+(extra?extra.gasW+extra.gasK:0);return `<tr><td style="text-align:left">${nm}</td><td>${f0(u[k])}</td><td>${f0(tot)}</td><td>${b===''||b==null?'—':f0(num(b))}</td></tr>`}).join('');return `<h3 style="font-size:14px;margin:12px 0 4px">I vostri orari mese per mese</h3><div class="tw"><table class="st"><tr><th>Mese</th><th>Riscaldamento m³</th><th>Con acqua calda e cucina m³</th><th>Bolletta m³</th></tr>${righe}</table></div><p class="note">Le bollette si scrivono nella pagina «Consumi».</p>`})()}</div>
      <div class="card"><h2>Una giornata di gennaio</h2>${orariSVG(tr,X.F)}<p class="note">Temperatura percepita ora per ora in una giornata di gennaio. Le bande colorate sono le vostre fasce.</p></div>`}
   document.getElementById('viewOrari').innerHTML=`<div class="card"><h2>Orari di accensione</h2>
    <p class="note">Simulazione ora per ora di tutta la stagione (dal 15 ottobre al 15 aprile), con il calcolo della pagina «Calcolo»: aria della stanza, muri e solai che si scaldano lentamente, acqua e ghisa dei radiatori, il cronotermostato che accende e spegne, il sole e il calore interno. È un metodo dinamico semplificato, sulla linea della UNI EN ISO 52016-1.</p>
@@ -1114,12 +1213,13 @@ function renderOrari(){
     <label class="wide">Fasce in cui siete in casa (ore)<input type="text" data-or="fasce" value="${String(O.fasce??'').replace(/["<>&]/g,'')}" placeholder="6-8, 12-14, 18-22"></label>
     ${inp('Tc','Temperatura voluta (°C)',0.5)}${inp('Tmin','Minimo quando è spento (°C)',0.5)}
     ${inp('Tnot','Temperatura ridotta (°C)',0.5)}
-    <label>Inerzia della casa<select data-cn="inerzia">${optsS([['leggera','leggera'],['media','media'],['pesante','pesante (muri spessi)']],S.cons.inerzia)}</select></label>
+    <label>Inerzia della casa<select data-cn="inerzia">${optsS([['','automatica (dal muro)'],['leggera','leggera'],['media','media'],['pesante','pesante (muri spessi)']],S.cons.inerzia||'')}</select></label>
     ${inp('ac','Condizionatore in cucina (kW, 0 = no)',0.5)}${inp('cop','Rendimento del condizionatore (COP)',0.1)}
     ${inp('pGas','Prezzo del gas (€/m³)',0.05)}${inp('pLuce','Prezzo della luce (€/kWh)',0.01)}
    </div>
-   <p class="note" style="margin-top:6px">Mandata ${f0(X&&X.M?X.M.Tf:num(S.g.Tm))} °C con salto ${f0(X&&X.M?X.M.dT:num(S.g.dTp))} K (scheda «Calcolo»), caldaia fino a ${f1(X&&X.M?X.M.Pb/1000:0)} kW (par. 04). Medie mensili e rendimenti dalla pagina «Consumi»; fuori, durante il giorno, ±3 °C attorno alla media.</p></div>
+   <p class="note" style="margin-top:6px">Mandata ${f0(X&&X.M?X.M.Tf:num(S.g.Tm))} °C con salto ${f0(X&&X.M?X.M.dT:num(S.g.dTp))} K (scheda «Calcolo»), caldaia fino a ${f1(X&&X.M?X.M.Pb/1000:0)} kW (par. 04). Medie mensili dal comune, rendimenti automatici; fuori, durante il giorno, ±3 °C attorno alla media.</p></div>
    ${res}`}
+function setUI(){document.body.classList.toggle('adv',S.ui==='avanzato');document.querySelectorAll('[data-ui]').forEach(b=>b.classList.toggle('pri',b.dataset.ui===(S.ui==='avanzato'?'avanzato':'semplice')))}
 function setView(v){
   S.view=v;[['calc','viewCalc'],['cald','viewCald'],['posto','viewPosto'],['rel','viewRel'],['cons','viewCons'],['orari','viewOrari']].forEach(([k,id])=>{const el=document.getElementById(id);if(el)el.classList.toggle('hide',v!==k)});
   document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('pri',b.dataset.view===v));
@@ -1128,23 +1228,25 @@ function setView(v){
 /* ---------- eventi ---------- */
 document.addEventListener('input',e=>{
   const t=e.target;
-  if(t.id==='comune'){if(t.value!==''){S.g.Te=parseFloat(t.value);document.querySelector('input[data-g="Te"]').value=S.g.Te;renderOut()}return}
   if(t.dataset.cn){S.cons[t.dataset.cn]=(t.tagName==='SELECT')?t.value:(t.value===''?'':parseFloat(t.value));save();if(t.tagName==='SELECT'){if(S.view==='orari')renderOrari();else renderCons()}return}
   if(t.dataset.or){S.orari[t.dataset.or]=t.dataset.or==='fasce'?t.value:(t.value===''?'':parseFloat(t.value));save();return}
   if(t.dataset.tm){S.cons.tm[t.dataset.tm]=t.value===''?'':parseFloat(t.value);save();return}
   if(t.dataset.bol){S.cons.bol[t.dataset.bol]=t.value===''?'':parseFloat(t.value);save();return}
   if(t.dataset.lay!=null){const l=(S.g.wallLay||[])[+t.dataset.lay];if(l){l[t.dataset.lf]=t.dataset.lf==='s'?(t.value===''?'':parseFloat(t.value)):t.value;const u=document.getElementById('strU');if(u)u.textContent=r1(strataU(S.g.wallLay));renderOut()}return}
   if(t.dataset.pd!==undefined){S.posto.done[t.dataset.pd]=!!t.checked;save();const pcd=t.closest('.pc');if(pcd)pcd.classList.toggle('dn',!!t.checked);postoRefresh();return}
-  if(t.dataset.pcfg){S.posto.cfg=t.value;save();renderPosto();return}
+  if(t.dataset.pcfg){S.posto.cfg=t.value;S.g.sonda=t.value==='B'?'si':'no';save();renderPosto();return}
   if(t.dataset.pck){S.posto.ck[t.dataset.pck]=t.value===''?'':parseFloat(t.value);save();const el=document.getElementById('pcheck');if(el)el.innerHTML=postoCheck();return}
   if(t.dataset.cs){S.cald.par[t.dataset.cs]=(t.tagName==='SELECT')?t.value:(t.value===''?'':parseFloat(t.value));save();
     S.cald.letture.forEach(l=>updateLettura(l.id));if(S.view==='posto')postoRefresh();return}
   if(t.dataset.lk){const box=t.closest('[data-lid]');const l=box&&S.cald.letture.find(x=>x.id==box.dataset.lid);
     if(l){l[t.dataset.lk]=(t.type==='number')?(t.value===''?'':parseFloat(t.value)):t.value;save();updateLettura(l.id);
       if(t.dataset.lk==='quando')box.querySelector('summary').firstChild.textContent=(t.value||'Lettura '+l.id)+' '}return}
-  if(t.dataset.g){S.g[t.dataset.g]=(t.tagName==='INPUT'&&t.type==='number')?(t.value===''?'':parseFloat(t.value)):t.value;
-    if(t.dataset.g==='Te'){const c=document.getElementById('comune');const m=COMUNI.find(x=>x[1]!==''&&x[1]===S.g.Te);c.value=m?String(m[1]):''}
-    if(t.tagName==='SELECT'&&['wallType','winType','ceilType','floorType','upType','dnType','sdType','esp','epoca'].includes(t.dataset.g))renderStr();
+  if(t.dataset.g){const k=t.dataset.g;S.g[k]=(t.tagName==='INPUT'&&t.type==='number')?(t.value===''?'':parseFloat(t.value)):t.value;
+    if(k==='impAuto')S.g.impAuto=t.value!=='0';
+    if(['Tm','Tr','dTp','TrMax'].includes(k)){S.g.impAuto=false;const ia=document.querySelector('select[data-g="impAuto"]');if(ia)ia.value='0'}
+    if(k==='comune'&&COMUNI2[t.value]){S.g.Te=COMUNI2[t.value].Te;const te=document.querySelector('input[data-g="Te"]');if(te)te.value=S.g.Te}
+    if(k==='sonda')S.posto.cfg=t.value==='si'?'B':'A';
+    if(t.tagName==='SELECT'&&['wallType','winType','ceilType','floorType','upType','dnType','sdType','esp','epoca','anno','muroTipo','muroIso','vetro','telaio','sopra','sotto'].includes(k)||k==='anno'||k==='muroSp')renderStr();
     renderOut();return}
   const det=t.closest&&t.closest('details.room');if(!det)return;
   const r=S.rooms.find(x=>x.id==det.dataset.id);if(!r)return;
@@ -1163,6 +1265,7 @@ document.addEventListener('input',e=>{
 document.addEventListener('change',e=>{const t=e.target;if(!t.dataset||t.tagName!=='INPUT')return;if(t.dataset.or)renderOrari();else if(t.dataset.cn||t.dataset.tm||t.dataset.bol)renderCons()});
 document.addEventListener('click',e=>{
   const b=e.target.closest('button');if(!b)return;
+  if(b.dataset.ui){S.ui=b.dataset.ui;setUI();save();return}
   if(b.dataset.view){setView(b.dataset.view);return}
   if(b.dataset.addlay){S.g.wallLay=S.g.wallLay||[];S.g.wallLay.push({m:'intonaco',s:1.5});renderStr();renderOut();return}
   if(b.dataset.dellay!=null&&b.dataset.dellay!==''){S.g.wallLay.splice(+b.dataset.dellay,1);renderStr();renderOut();return}
@@ -1186,7 +1289,7 @@ document.getElementById('clearAll').onclick=()=>{if(confirm('Cancellare tutte le
 document.getElementById('exportJson').onclick=()=>{const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([JSON.stringify(S,null,1)],{type:'application/json'}));a.download='riscaldamento-villetta.json';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)};
 document.getElementById('importBtn').onclick=()=>document.getElementById('importFile').click();
 document.getElementById('importFile').onchange=ev=>{const f=ev.target.files[0];if(!f)return;const rd=new FileReader();rd.onload=()=>{try{const o=JSON.parse(rd.result);if(o.g&&Array.isArray(o.rooms)){S=o;normalize();renderG();renderRooms();renderOut();setView(S.view)}else alert('File non valido')}catch(e){alert('File non valido')}};rd.readAsText(f)};
-renderG();renderRooms();renderOut();setView(S.view||'calc');
+setUI();renderG();renderRooms();renderOut();setView(S.view||'calc');
 </script>
 </body>
 </html>
