@@ -88,7 +88,7 @@ details.more h2{display:none}
 <h1>Dimensionamento riscaldamento</h1>
 <p class="sub">Calcolo semplificato ispirato alla UNI EN 12831 per riscaldare un solo piano con piani freddi sopra e sotto. Dove non sai un dato lascia il valore proposto. Quello che vedi ora è un esempio da sostituire.</p>
 
-<div class="row no-print" id="tabs" style="margin:8px 0"><button data-view="calc" class="pri">Calcolo</button><button data-view="cald">Caldaia e ΔT</button><button data-view="posto">Sul posto</button><button data-view="rel">Relazione</button><button data-view="cons">Consumi</button></div>
+<div class="row no-print" id="tabs" style="margin:8px 0"><button data-view="calc" class="pri">Calcolo</button><button data-view="cald">Caldaia e ΔT</button><button data-view="posto">Sul posto</button><button data-view="rel">Relazione</button><button data-view="cons">Consumi</button><button data-view="orari">Orari</button></div>
 <div id="viewCalc">
 <div id="ans"></div>
 <div class="card no-print">
@@ -132,6 +132,7 @@ details.more h2{display:none}
 <div id="viewPosto" class="hide"></div>
 <div id="viewRel" class="hide"></div>
 <div id="viewCons" class="hide"></div>
+<div id="viewOrari" class="hide"></div>
 </main>
 
 <script>
@@ -570,6 +571,70 @@ function consCalc(S){
     tot:{Qht:sum('Qht'),Qgn:sum('Qgn'),Qnd:sum('Qnd'),QndI:sum('QndI'),gasN:sum('gasN'),gasI:sum('gasI'),gasCap:sum('gasCap'),gasW:sum('gasW'),gasK:sum('gasK'),tot:sum('tot'),totN:sum('totN')},
     bol:withBol.length?{n:withBol.length,bol:withBol.reduce((s,m)=>s+m.bol,0),calc:withBol.reduce((s,m)=>s+m.tot,0),cap:withBol.reduce((s,m)=>s+m.gasCap+m.gasW+m.gasK,0),norm:withBol.reduce((s,m)=>s+m.totN,0)}:null};
 }
+// ---- simulazione ora per ora (metodo dinamico semplificato, sulla linea della UNI EN ISO 52016-1): tre nodi, aria, muri e acqua dei radiatori ----
+const defOrari=()=>({fasce:'6-8, 12-14, 18-22',Tc:20,Tmin:12,Tnot:16,ac:0,cop:2.8,pGas:1.30,pLuce:0.35});
+function parseFasce(t){return String(t||'').split(/[,;]/).map(x=>x.trim().match(/^(\d{1,2})(?:[:.](\d{2}))?\s*-\s*(\d{1,2})(?:[:.](\d{2}))?$/)).filter(Boolean)
+  .map(m=>[+m[1]+(+m[2]||0)/60,+m[3]+(+m[4]||0)/60]).filter(([a,b])=>b>a&&a>=0&&b<=24)}
+const inFasce=(F,h)=>F.some(([a,b])=>h>=a&&h<b);
+// conduttanze e capacità della casa dal calcolo a norma (o tarato)
+function simModel(S){
+  const g=S.g,C=Object.assign(defCons(),S.cons||{}),R=sysCalc(S);if(!R.rooms.length)return null;
+  const Af=R.area;let Hair=0,Hmass=0;const fix=[];
+  for(const x of R.rooms){const c=x.c,r=x.r,dT=c.dTe>0?c.dTe:1;
+    Hair+=(c.pWin+c.pV)/dT; // finestre e aria: sul nodo dell'aria, verso fuori
+    Hmass+=c.pWall/dT;      // muri esterni: sul nodo dei muri, verso fuori
+    const adj=[[c.pFloor,c.Tf,r.floorTo,g.dnType],[c.pCeil,c.Tc,r.ceilTo,g.upType],[c.pOther,c.Ts,'unh',g.sdType]];
+    for(const [phi,t,to,typ] of adj){if(!(phi>0))continue;
+      const fixedT=to==='ground'||(to==='unh'&&BU[typ]&&BU[typ].b==null);
+      if(fixedT){const d=c.Ti-t;if(d>0.1)fix.push([phi/d,t])}else Hmass+=phi/dT}} // locali con fattore b: equivalente verso fuori
+  const kap=({leggera:80,media:165,pesante:260})[C.inerzia]||165;
+  const have=R.rooms.reduce((s,x)=>s+x.c.have,0),n=have>0?R.rooms.reduce((s,x)=>s+x.c.have*x.c.n,0)/have:num(g.expo,1.3);
+  const rp=recParams(S,R),p04=num(S.cald&&S.cald.par&&S.cald.par.p04)>0?num(S.cald.par.p04):rp.p04;
+  const K=consCalc(S);
+  return {R,C,Af,Hair,Hmass,fix,sol:Object.fromEntries(K.months.map(m=>[m.key,m.Qsol])),Ca:5*Af,Cm:kap*Af/3.6,Cr:R.Vrad*1.163*1.4+10,Ham:9.1*2.5*Af,have,n,
+    Pb:par4kW(p04)*0.95*1000,Tf:Math.min(num(g.Tm,70),num(g.TfMax,73)),dT:R.dTc,mcp:Math.max(R.tot,1000)/R.dTc*1.2,
+    phiInt:Af<=120?7.987*Af-0.0353*Af*Af:450,etaED:num(C.ee,0.93)*num(C.ed,0.95)};
+}
+// una stagione con un certo orario: set(h) = temperatura voluta, pres(h) = ci siete; ac = W del condizionatore
+function simRun(M,set,pres,{ac=0,cop=2.8,trace=false}={}){
+  const {C}=M,dt=2/60;let Ta=16,Tm=16,Tw=16,on=false;
+  let gas=0,heat=0,acEl=0,useH=0,ok19=0,sumOp=0,minOp=99,tr=null,reach=null,rose=false;const mGas={};
+  for(const [key,,days] of MESI){
+    const te0=num(C.tm[key],TM_DEF[key]),solW=(M.sol[key]||0)*1000/(days*8); // sole del mese sui muri, tra le 8 e le 16
+    for(let d=0;d<8;d++){const last=d===7;let gD=0,hD=0,aD=0,uH=0,o19=0,sOp=0;if(last&&trace&&key==='gen')tr=[];let start=null;
+      for(let i=0;i<24/dt;i++){const h=i*dt,Te=te0+3*Math.cos(2*Math.PI*(h-15)/24),Ts=set(h);
+        if(last&&key==='gen'&&start==null&&i>0&&Ts>set(h-dt)+0.5){start=h;rose=true} // inizio della prima salita del giorno
+        if(Ta<Ts-0.3)on=true;else if(Ta>Ts+0.2)on=false;
+        let Qin=0,eta=0.97;if(on){Qin=Math.min(M.Pb,2*M.mcp*Math.max(M.Tf-Tw,0));const Tr=M.Tf-Qin/M.mcp;eta=Tr<30?0.98:Tr<55?0.98-0.05*(Tr-30)/25:0.89}
+        const Pr=M.have*Math.pow(Math.max(Tw-Ta,0)/50,M.n),Pac=(ac>0&&Ta<Ts-0.5&&pres(h))?ac:0;
+        const sol=(h>=8&&h<16)?solW:0,gi=M.phiInt;
+        let qfix=0;for(const [H,T] of M.fix)qfix+=H*(Tm-T);
+        Tw+=(Qin-Pr)*dt/M.Cr;
+        Ta+=(0.7*Pr+Pac+0.5*gi-M.Hair*(Ta-Te)+M.Ham*(Tm-Ta))*dt/M.Ca;
+        Tm+=(0.3*Pr+0.5*gi+sol-M.Hmass*(Tm-Te)-qfix+M.Ham*(Ta-Tm))*dt/M.Cm;
+        hD+=Qin*dt/1000;gD+=Qin*dt/1000/(eta*M.etaED*PCI);aD+=Pac*dt/1000/cop;
+        const op=(Ta+Tm)/2;
+        if(pres(h)){uH+=dt;sOp+=op*dt;if(op>=19)o19+=dt;if(last&&key==='gen')minOp=Math.min(minOp,op)}
+        if(last&&key==='gen'&&start!=null&&reach==null&&h>=start&&op>=19)reach=h-start;
+        if(tr&&last&&key==='gen'&&i%15===0)tr.push([h,Ta,op,on?1:0])}
+      if(last){mGas[key]=gD*days;gas+=gD*days;heat+=hD*days;acEl+=aD*days;useH+=uH*days;ok19+=o19*days;sumOp+=sOp*days}}}
+  return {gas,heat,acEl,op:useH>0?sumOp/useH:null,pct19:useH>0?ok19/useH*100:null,minOp,trace:tr,mGas,reach:reach==null&&!rose?null:(reach==null?99:reach)};
+}
+function simStrategie(S){
+  const M=simModel(S);if(!M||!(M.have>0))return null;
+  const O=Object.assign(defOrari(),S.orari||{}),F=parseFasce(O.fasce),Tc=num(O.Tc,20),Tmin=num(O.Tmin,12),Tnot=num(O.Tnot,16);
+  if(!F.length)return {M,O,err:'Scrivi le fasce orarie, per esempio 6-8, 12-14, 18-22.'};
+  const pres=h=>inFasce(F,h),Fa=F.map(([a,b])=>[Math.max(0,a-2),b]);
+  const L=[['I vostri orari',h=>inFasce(F,h)?Tc:Tmin],
+    [`Stessi orari, il resto a ${r1(Tnot)} °C invece di ${r1(Tmin)}`,h=>inFasce(F,h)?Tc:Tnot],
+    ['Accensione anticipata di 2 ore',h=>inFasce(Fa,h)?Tc:Tmin],
+    [`${r1(Tc)} °C dalle 6 alle 22, notte ${r1(Tnot)} °C`,h=>(h>=6&&h<22)?Tc:Tnot],
+    [`Sempre ${r1(Tc)} °C`,()=>Tc]];
+  const out=L.map(([nome,set],i)=>Object.assign({nome},simRun(M,set,pres,{trace:i<3})));
+  if(num(O.ac)>0)out.push(Object.assign({nome:`I vostri orari + condizionatore ${r1(num(O.ac))} kW`},simRun(M,L[0][1],pres,{ac:num(O.ac)*1000,cop:num(O.cop,2.8),trace:true})));
+  out.forEach(o=>{o.eGas=o.gas*num(O.pGas,1.3);o.eLuce=o.acEl*num(O.pLuce,0.35);o.eTot=o.eGas+o.eLuce});
+  return {M,O,F,out};
+}
 //#CALC-END
 
 /* ---------- stato ---------- */
@@ -592,7 +657,7 @@ if(!S||!S.g||!Array.isArray(S.rooms))S=example();
 function normalize(){S.g=Object.assign(defG(),S.g);if(!Array.isArray(S.g.wallLay))S.g.wallLay=defG().wallLay;S.rooms.forEach(r=>{if(!Array.isArray(r.rads))r.rads=[];if(r.nPF==null)r.nPF=0;if(!(r.pfSize>0))r.pfSize=2.6;if(r.pfArea==null)r.pfArea='';if(r.pfU==null)r.pfU='';if(r.comm==null)r.comm=''});
   S.cald=Object.assign(defCald(),S.cald||{});S.cald.par=Object.assign(defCald().par,S.cald.par||{});if(!Array.isArray(S.cald.letture))S.cald.letture=[];
   lid=Math.max(0,...S.cald.letture.map(l=>l.id||0))+1;if(!S.view)S.view='calc';
-  S.cons=Object.assign(defCons(),S.cons||{});S.cons.tm=Object.assign({},TM_DEF,S.cons.tm||{});S.cons.bol=Object.assign(defCons().bol,S.cons.bol||{});
+  S.orari=Object.assign(defOrari(),S.orari||{});S.cons=Object.assign(defCons(),S.cons||{});S.cons.tm=Object.assign({},TM_DEF,S.cons.tm||{});S.cons.bol=Object.assign(defCons().bol,S.cons.bol||{});
   S.posto=Object.assign({cfg:'A',done:{},ck:{Te:'',setM:''}},S.posto||{});S.posto.done=S.posto.done||{};S.posto.ck=Object.assign({Te:'',setM:''},S.posto.ck||{});
   uid=Math.max(0,...S.rooms.map(r=>r.id||0))+1;rid=Math.max(0,...S.rooms.flatMap(r=>r.rads.map(a=>a.id||0)))+1}
 normalize();
@@ -1017,16 +1082,55 @@ function renderCons(){
    <p class="note">«Gas a norma» è il consumo per tenere tutte le stanze inserite alla loro temperatura giorno e notte. «Con le vostre ore» applica la riduzione per riscaldamento intermittente (UNI EN ISO 13790) e il limite dei radiatori: * = in quel mese i radiatori inseriti, in ${f0(num(C.ore,24))} ore al giorno, non riescono a dare tutto il calore che serve (al massimo ${f1(K.capKW)} kW), quindi la casa resta sotto i 20 °C. Le medie mensili sono quelle tipiche di Torino: correggile con quelle del tuo comune (UNI 10349-1).</p></div>
   ${diag}`}
 const f2x=x=>isFinite(x)?x.toLocaleString('it-IT',{minimumFractionDigits:2,maximumFractionDigits:2}):'—';
+/* ---------- pagina «Orari»: simulazione ora per ora della stagione ---------- */
+function orariSVG(list,F){
+  const W=560,H=230,L=34,B=26,T=10,Rr=10,ys=list.flatMap(o=>o.trace.map(p=>p[2]));
+  const y0=Math.floor(Math.min(...ys,12)-1),y1=Math.ceil(Math.max(...ys,21)+1);
+  const X=h=>L+(W-L-Rr)*h/24,Y=v=>H-B-(H-B-T)*(v-y0)/(y1-y0);
+  let gr=F.map(([a,b])=>`<rect x="${X(a)}" y="${T}" width="${X(b)-X(a)}" height="${H-B-T}" fill="var(--acc)" opacity=".08"/>`).join('');
+  for(let v=y0;v<=y1;v+=2)gr+=`<line x1="${L}" x2="${W-Rr}" y1="${Y(v)}" y2="${Y(v)}" stroke="currentColor" opacity=".12"/><text x="${L-5}" y="${Y(v)+4}" text-anchor="end">${v}</text>`;
+  for(let h=0;h<=24;h+=3)gr+=`<text x="${X(h)}" y="${H-B+14}" text-anchor="middle">${h}</text>`;
+  gr+=`<line x1="${L}" x2="${W-Rr}" y1="${Y(19)}" y2="${Y(19)}" stroke="var(--ok)" stroke-dasharray="4 4"/><text x="${W-Rr}" y="${Y(19)-4}" text-anchor="end" style="fill:var(--ok)">19 °C</text>`;
+  const cols=['var(--bad)','var(--acc)','var(--ok)','#4a7fd4'];
+  const lines=list.map((o,i)=>`<path d="${o.trace.map((p,j)=>(j?'L':'M')+X(p[0]).toFixed(1)+' '+Y(p[2]).toFixed(1)).join(' ')}" fill="none" stroke="${cols[i%cols.length]}" stroke-width="2.2"/>`).join('');
+  const leg=list.map((o,i)=>`<span style="display:inline-flex;align-items:center;gap:5px;margin-right:12px"><span style="width:14px;height:3px;background:${cols[i%cols.length]};display:inline-block"></span>${o.nome}</span>`).join('');
+  return `<svg viewBox="0 0 ${W} ${H}" width="100%" style="max-width:640px;color:var(--ink)">${gr}${lines}</svg><div class="note">${leg}</div>`}
+function renderOrari(){
+  const O=Object.assign(defOrari(),S.orari||{}),X=simStrategie(S);
+  const inp=(k,lab,step,type)=>`<label>${lab}<input type="${type||'number'}" ${type?'':`step="${step}"`} data-or="${k}" value="${O[k]??''}"></label>`;
+  let res='';
+  if(!X)res='<div class="card"><p class="note">Servono stanze con radiatori per simulare.</p></div>';
+  else if(X.err)res=`<div class="card"><p class="warn">${X.err}</p></div>`;
+  else{const best=X.out.reduce((a,o)=>(o.pct19>=80&&(!a||o.eTot<a.eTot))?o:a,null),base=X.out[0];
+    const rows=X.out.map(o=>`<tr${o===best?' style="background:var(--soft)"':''}><td style="text-align:left;white-space:normal">${o.nome}${o===best?' <b class="ok">← il più economico sopra l\'80 %</b>':''}</td><td>${f0(o.gas)}</td><td><b>${f0(o.eTot)}</b>${o.eLuce>0?`<br><span class="note">di cui luce ${f0(o.eLuce)}</span>`:''}</td><td>${o===base?'—':(o.eTot>=base.eTot?'+':'−')+f0(Math.abs(o.eTot-base.eTot))}</td><td><b class="${o.op>=19?'ok':o.op>=18?'warn':'bad'}">${f1(o.op)}</b></td><td>${f0(o.pct19)} %</td><td>${f1(o.minOp)}</td><td>${o.reach==null?'—':(o.reach>12?'non ci arriva':f1(o.reach)+' h')}</td></tr>`).join('');
+    const tr=X.out.filter(o=>o.trace);
+    res=`<div class="card"><h2>Risultati della stagione</h2><div class="tw"><table class="st"><tr><th>Orario</th><th>Gas m³</th><th>Spesa €</th><th>Rispetto ai vostri orari €</th><th>Percepita quando ci siete °C</th><th>Tempo sopra 19 °C</th><th>Minimo percepito in gennaio °C</th><th>Ore per arrivare a 19 °C (gennaio)</th></tr>${rows}</table></div>
+     <p class="note">«Percepita» è la media tra aria e muri: è quella che senti addosso. Le colonne sul comfort contano solo le ore delle vostre fasce, quando siete in casa.</p>
+     ${(()=>{const C=S.cons,u=base.mGas,K=consCalc(S),righe=MESI.map(([k,nm])=>{const b=C.bol[k];const extra=K.months.find(m=>m.key===k);const tot=u[k]+(extra?extra.gasW+extra.gasK:0);return `<tr><td style="text-align:left">${nm}</td><td>${f0(u[k])}</td><td>${f0(tot)}</td><td>${b===''||b==null?'—':f0(num(b))}</td></tr>`}).join('');return `<h3 style="font-size:14px;margin:12px 0 4px">I vostri orari mese per mese</h3><div class="tw"><table class="st"><tr><th>Mese</th><th>Riscaldamento m³</th><th>Con acqua calda e cucina m³</th><th>Bolletta m³</th></tr>${righe}</table></div><p class="note">Le bollette si scrivono nella pagina «Consumi».</p>`})()}</div>
+     <div class="card"><h2>Una giornata di gennaio</h2>${orariSVG(tr,X.F)}<p class="note">Temperatura percepita ora per ora in una giornata di gennaio. Le bande colorate sono le vostre fasce.</p></div>`}
+  document.getElementById('viewOrari').innerHTML=`<div class="card"><h2>Orari di accensione</h2>
+   <p class="note">Simulazione ora per ora di tutta la stagione (dal 15 ottobre al 15 aprile), con il calcolo della pagina «Calcolo»: aria della stanza, muri e solai che si scaldano lentamente, acqua e ghisa dei radiatori, il cronotermostato che accende e spegne, il sole e il calore interno. È un metodo dinamico semplificato, sulla linea della UNI EN ISO 52016-1.</p>
+   <div class="grid" style="margin-top:8px">
+    <label class="wide">Fasce in cui siete in casa (ore)<input type="text" data-or="fasce" value="${String(O.fasce??'').replace(/["<>&]/g,'')}" placeholder="6-8, 12-14, 18-22"></label>
+    ${inp('Tc','Temperatura voluta (°C)',0.5)}${inp('Tmin','Minimo quando è spento (°C)',0.5)}
+    ${inp('Tnot','Temperatura ridotta (°C)',0.5)}
+    <label>Inerzia della casa<select data-cn="inerzia">${optsS([['leggera','leggera'],['media','media'],['pesante','pesante (muri spessi)']],S.cons.inerzia)}</select></label>
+    ${inp('ac','Condizionatore in cucina (kW, 0 = no)',0.5)}${inp('cop','Rendimento del condizionatore (COP)',0.1)}
+    ${inp('pGas','Prezzo del gas (€/m³)',0.05)}${inp('pLuce','Prezzo della luce (€/kWh)',0.01)}
+   </div>
+   <p class="note" style="margin-top:6px">Mandata ${f0(X&&X.M?X.M.Tf:num(S.g.Tm))} °C con salto ${f0(X&&X.M?X.M.dT:num(S.g.dTp))} K (scheda «Calcolo»), caldaia fino a ${f1(X&&X.M?X.M.Pb/1000:0)} kW (par. 04). Medie mensili e rendimenti dalla pagina «Consumi»; fuori, durante il giorno, ±3 °C attorno alla media.</p></div>
+   ${res}`}
 function setView(v){
-  S.view=v;[['calc','viewCalc'],['cald','viewCald'],['posto','viewPosto'],['rel','viewRel'],['cons','viewCons']].forEach(([k,id])=>{const el=document.getElementById(id);if(el)el.classList.toggle('hide',v!==k)});
+  S.view=v;[['calc','viewCalc'],['cald','viewCald'],['posto','viewPosto'],['rel','viewRel'],['cons','viewCons'],['orari','viewOrari']].forEach(([k,id])=>{const el=document.getElementById(id);if(el)el.classList.toggle('hide',v!==k)});
   document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('pri',b.dataset.view===v));
-  if(v==='cald')renderCald();if(v==='posto')renderPosto();if(v==='rel')renderRel();if(v==='cons')renderCons();save()}
+  if(v==='cald')renderCald();if(v==='posto')renderPosto();if(v==='rel')renderRel();if(v==='cons')renderCons();if(v==='orari')renderOrari();save()}
 
 /* ---------- eventi ---------- */
 document.addEventListener('input',e=>{
   const t=e.target;
   if(t.id==='comune'){if(t.value!==''){S.g.Te=parseFloat(t.value);document.querySelector('input[data-g="Te"]').value=S.g.Te;renderOut()}return}
-  if(t.dataset.cn){S.cons[t.dataset.cn]=(t.tagName==='SELECT')?t.value:(t.value===''?'':parseFloat(t.value));save();if(t.tagName==='SELECT')renderCons();return}
+  if(t.dataset.cn){S.cons[t.dataset.cn]=(t.tagName==='SELECT')?t.value:(t.value===''?'':parseFloat(t.value));save();if(t.tagName==='SELECT'){if(S.view==='orari')renderOrari();else renderCons()}return}
+  if(t.dataset.or){S.orari[t.dataset.or]=t.dataset.or==='fasce'?t.value:(t.value===''?'':parseFloat(t.value));save();return}
   if(t.dataset.tm){S.cons.tm[t.dataset.tm]=t.value===''?'':parseFloat(t.value);save();return}
   if(t.dataset.bol){S.cons.bol[t.dataset.bol]=t.value===''?'':parseFloat(t.value);save();return}
   if(t.dataset.lay!=null){const l=(S.g.wallLay||[])[+t.dataset.lay];if(l){l[t.dataset.lf]=t.dataset.lf==='s'?(t.value===''?'':parseFloat(t.value)):t.value;const u=document.getElementById('strU');if(u)u.textContent=r1(strataU(S.g.wallLay));renderOut()}return}
@@ -1056,7 +1160,7 @@ document.addEventListener('input',e=>{
       document.querySelectorAll('select[data-k="comm"] option').forEach(o=>{if(o.value==String(r.id))o.textContent=t.value||'Stanza'})}
     renderOut()}
 });
-document.addEventListener('change',e=>{const t=e.target;if(t.dataset&&(t.dataset.cn||t.dataset.tm||t.dataset.bol)&&t.tagName==='INPUT')renderCons()});
+document.addEventListener('change',e=>{const t=e.target;if(!t.dataset||t.tagName!=='INPUT')return;if(t.dataset.or)renderOrari();else if(t.dataset.cn||t.dataset.tm||t.dataset.bol)renderCons()});
 document.addEventListener('click',e=>{
   const b=e.target.closest('button');if(!b)return;
   if(b.dataset.view){setView(b.dataset.view);return}
