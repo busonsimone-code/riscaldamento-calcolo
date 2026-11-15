@@ -88,7 +88,7 @@ details.more h2{display:none}
 <h1>Dimensionamento riscaldamento</h1>
 <p class="sub">Calcolo semplificato ispirato alla UNI EN 12831 per riscaldare un solo piano con piani freddi sopra e sotto. Dove non sai un dato lascia il valore proposto. Quello che vedi ora è un esempio da sostituire.</p>
 
-<div class="row no-print" id="tabs" style="margin:8px 0"><button data-view="calc" class="pri">Calcolo</button><button data-view="cald">Caldaia e ΔT</button><button data-view="posto">Sul posto</button><button data-view="rel">Relazione</button></div>
+<div class="row no-print" id="tabs" style="margin:8px 0"><button data-view="calc" class="pri">Calcolo</button><button data-view="cald">Caldaia e ΔT</button><button data-view="posto">Sul posto</button><button data-view="rel">Relazione</button><button data-view="cons">Consumi</button></div>
 <div id="viewCalc">
 <div id="ans"></div>
 <div class="card no-print">
@@ -131,6 +131,7 @@ details.more h2{display:none}
 <div id="viewCald" class="hide"></div>
 <div id="viewPosto" class="hide"></div>
 <div id="viewRel" class="hide"></div>
+<div id="viewCons" class="hide"></div>
 </main>
 
 <script>
@@ -524,6 +525,51 @@ function consigli(l,cald,S){
   if(has(l.Tr)&&num(l.Tr)>TrMax)out.push({cls:'warn',txt:`Ritorno sopra ${r1(TrMax)} °C: in questo momento la caldaia non condensa. ${TrMax+dTp<num(S.g.TfMax,70)?`Abbassa il set massimo di mandata a ${r1(TrMax+dTp)} °C (con salto ${dTp} K) o controlla`:'Il salto è più piccolo di quello impostato: controlla'} che il par. 33 sia a 1 e il par. 34 a ${i34>=0?i34:'—'} (${dTp} K)${has(l.Tm)?`; con mandata ${r1(num(l.Tm))} °C e salto ${dTp} K il ritorno sarebbe ${r1(num(l.Tm)-dTp)} °C`:''}.`});
   if(has(l.press)&&(num(l.press)<0.8||num(l.press)>2.5))out.push({cls:'warn',txt:`Pressione ${l.press} bar: il libretto indica 1-1,5 bar a freddo e sotto 0,5 bar la caldaia si ferma. Controlla il carico e il vaso.`});
   return out}
+// ---- consumi stagionali: fabbisogno mensile UNI/TS 11300-1, rendimenti dell'impianto UNI/TS 11300-2 ----
+const MESI=[['ott','Ottobre (15-31)',17],['nov','Novembre',30],['dic','Dicembre',31],['gen','Gennaio',31],['feb','Febbraio',28],['mar','Marzo',31],['apr','Aprile (1-15)',15]];
+const TM_DEF={ott:12.3,nov:6.7,dic:2.4,gen:1.2,feb:3.3,mar:8.3,apr:12.4}; // medie mensili tipiche di Torino, zona E (verifica UNI 10349-1 per il comune)
+// irraggiamento medio giornaliero su parete verticale, MJ/m² al giorno: valori indicativi per il Nord Italia (45° N), la UNI 10349-1 dà quelli del comune
+const IRR={S:{ott:10.0,nov:7.6,dic:6.9,gen:7.9,feb:9.6,mar:10.4,apr:9.4},SE:{ott:7.9,nov:5.7,dic:5.0,gen:5.9,feb:7.6,mar:9.0,apr:9.3},
+ E:{ott:5.4,nov:3.5,dic:2.9,gen:3.6,feb:5.1,mar:6.9,apr:8.3},NE:{ott:3.0,nov:2.0,dic:1.7,gen:2.0,feb:2.8,mar:4.0,apr:5.4},N:{ott:2.3,nov:1.6,dic:1.4,gen:1.6,feb:2.2,mar:3.0,apr:3.9}};
+const ORIENT=[['','non so (come est/ovest)'],['N','nord'],['NE','nord-est'],['E','est'],['SE','sud-est'],['S','sud'],['SO','sud-ovest'],['O','ovest'],['NO','nord-ovest']];
+function irr(o,m){return IRR[({S:'S',SE:'SE',SO:'SE',E:'E',O:'E',NE:'NE',NO:'NE',N:'N'})[o]||'E'][m]}
+// fattore solare del vetro (incidenza normale)
+function gWin(g){const t=g.winType;if(t==='be')return 0.67;if(t==='tr')return 0.5;if(t==='vs_l'||t==='vs_m')return 0.85;if(t)return 0.75;return (EPOCHE[g.epoca]||EPOCHE.nonso).win>=4.5?0.85:0.75}
+const defCons=()=>({ore:24,inerzia:'media',ee:0.93,erg:0.95,ed:0.95,egn:0.95,acs:'si',Sacs:'',cuc:0,tm:Object.assign({},TM_DEF),bol:{ott:'',nov:'',dic:'',gen:'',feb:'',mar:'',apr:''},bolV:'nonso'});
+const PCI=9.6; // kWh per Sm³ di metano (potere calorifico inferiore)
+function consCalc(S){
+  const g=S.g,C=Object.assign(defCons(),S.cons||{}),R=sysCalc(S),k=R.k;
+  const Af=R.area,phiInt=Af<=120?7.987*Af-0.0353*Af*Af:450; // apporti interni per abitazioni (UNI/TS 11300-1)
+  const kap=({leggera:80,media:165,pesante:260})[C.inerzia]||165; // capacità termica interna kJ/m²K (UNI EN ISO 13790)
+  const H=R.rooms.reduce((s,x)=>s+(x.c.pT+x.c.pV)/(x.c.dTe>0?x.c.dTe:1),0); // W/K a regime (con la taratura se il calcolo è tarato)
+  const tau=H>0?kap*Af/(3.6*H):50; // costante di tempo in ore
+  const etaG=num(C.ee,0.93)*num(C.erg,0.95)*num(C.ed,0.95)*num(C.egn,0.95);
+  const f=Math.min(1,Math.max(1/24,num(C.ore,24)/24));
+  const Su=num(C.Sacs)>0?num(C.Sacs):Af;
+  const Vw=Su<=35?50:Su<=50?2.667*Su-43.33:Su<=200?1.067*Su+36.67:250; // litri al giorno di acqua calda (UNI/TS 11300-2)
+  const capKW=R.rooms.reduce((s,x)=>s+x.c.have*radFac(R.TfMax,R.TfMax-R.dTc,18,x.c.n),0)/1000; // radiatori a pieno, stanze a 18 °C
+  const months=MESI.map(([key,name,days])=>{
+    const te=num(C.tm[key],TM_DEF[key]),t=days*24,gm=Object.assign({},g,{Te:te,rip:0});
+    let Qht=0,Qsol=0;
+    for(const x of R.rooms){const c=roomCalc(x.r,gm);Qht+=(c.pT+c.pV)*k*t/1000;
+      Qsol+=c.win*0.75*gWin(g)*0.9*0.8*irr(x.r.orient,key)*days/3.6}; // telaio 25 %, vetro reale 0,9, ombre 0,8; MJ → kWh
+    const Qint=phiInt*t/1000,Qgn=Qint+Qsol,gam=Qht>0?Qgn/Qht:0,a=1+tau/15;
+    const eta=gam<=0?1:Math.abs(gam-1)<1e-6?a/(a+1):(1-Math.pow(gam,a))/(1-Math.pow(gam,a+1)); // fattore di utilizzazione degli apporti
+    const Qnd=Math.max(0,Qht-eta*Qgn); // fabbisogno con riscaldamento continuo
+    const ared=Math.min(1,Math.max(f,1-3*(15/tau)*gam*(1-f))); // riduzione per riscaldamento intermittente (UNI EN ISO 13790)
+    const capKWh=capKW*24*f*days; // calore massimo che i radiatori possono dare nelle ore di accensione
+    const QndI=Qnd*ared,QdelI=Math.min(QndI,capKWh),QdelC=Math.min(Qnd,capKW*24*days);
+    const gasN=Qnd/etaG/PCI,gasI=QdelI/etaG/PCI,gasCap=capKWh/etaG/PCI;
+    const Qw=C.acs==='si'?0.02905*Vw*days:0,gasW=Qw/0.80/PCI,gasK=num(C.cuc)*days/30;
+    const bol=C.bol[key]===''||C.bol[key]==null?null:num(C.bol[key]);
+    return {key,name,days,te,Qht,Qint,Qsol,Qgn,gam,eta,Qnd,ared,QndI,QdelI,QdelC,capKWh,short:QndI>capKWh+1,gasN,gasI,gasCap,Qw,gasW,gasK,tot:gasI+gasW+gasK,totN:gasN+gasW+gasK,bol};
+  });
+  const sum=key=>months.reduce((s,m)=>s+(m[key]||0),0);
+  const withBol=months.filter(m=>m.bol!=null);
+  return {months,phiInt,tau,H,etaG,f,Vw,Su,capKW,GG:months.reduce((s,m)=>s+m.days*Math.max(0,20-m.te),0),
+    tot:{Qht:sum('Qht'),Qgn:sum('Qgn'),Qnd:sum('Qnd'),QndI:sum('QndI'),gasN:sum('gasN'),gasI:sum('gasI'),gasCap:sum('gasCap'),gasW:sum('gasW'),gasK:sum('gasK'),tot:sum('tot'),totN:sum('totN')},
+    bol:withBol.length?{n:withBol.length,bol:withBol.reduce((s,m)=>s+m.bol,0),calc:withBol.reduce((s,m)=>s+m.tot,0),cap:withBol.reduce((s,m)=>s+m.gasCap+m.gasW+m.gasK,0),norm:withBol.reduce((s,m)=>s+m.totN,0)}:null};
+}
 //#CALC-END
 
 /* ---------- stato ---------- */
@@ -546,6 +592,7 @@ if(!S||!S.g||!Array.isArray(S.rooms))S=example();
 function normalize(){S.g=Object.assign(defG(),S.g);if(!Array.isArray(S.g.wallLay))S.g.wallLay=defG().wallLay;S.rooms.forEach(r=>{if(!Array.isArray(r.rads))r.rads=[];if(r.nPF==null)r.nPF=0;if(!(r.pfSize>0))r.pfSize=2.6;if(r.pfArea==null)r.pfArea='';if(r.pfU==null)r.pfU='';if(r.comm==null)r.comm=''});
   S.cald=Object.assign(defCald(),S.cald||{});S.cald.par=Object.assign(defCald().par,S.cald.par||{});if(!Array.isArray(S.cald.letture))S.cald.letture=[];
   lid=Math.max(0,...S.cald.letture.map(l=>l.id||0))+1;if(!S.view)S.view='calc';
+  S.cons=Object.assign(defCons(),S.cons||{});S.cons.tm=Object.assign({},TM_DEF,S.cons.tm||{});S.cons.bol=Object.assign(defCons().bol,S.cons.bol||{});
   S.posto=Object.assign({cfg:'A',done:{},ck:{Te:'',setM:''}},S.posto||{});S.posto.done=S.posto.done||{};S.posto.ck=Object.assign({Te:'',setM:''},S.posto.ck||{});
   uid=Math.max(0,...S.rooms.map(r=>r.id||0))+1;rid=Math.max(0,...S.rooms.flatMap(r=>r.rads.map(a=>a.id||0)))+1}
 normalize();
@@ -593,6 +640,7 @@ function roomHTML(r){
    <label>Dimensione finestre<select data-k="winSize">${optsS([[0.6,'piccola 0,6 m²'],[1.2,'media 1,2 m²'],[1.7,'normale 1,7 m²'],[2.5,'grande 2,5 m²'],[3.0,'molto grande 3 m²']],r.winSize)}</select></label>
    ${fld('N. portefinestre','nPF',r.nPF,1)}
    <label>Dimensione portefinestre<select data-k="pfSize">${optsS([[1.8,'una anta 1,8 m²'],[2.6,'due ante 2,6 m²'],[3.3,'tre ante 3,3 m²'],[4.0,'scorrevole 4 m²']],r.pfSize)}</select></label>
+   <label class="wide">Finestre verso<select data-k="orient">${optsS(ORIENT,r.orient||'')}</select></label>
    <label class="wide">Comunica con (porta o arco sempre aperti)<select data-k="comm">${optsS([['','nessuna stanza'],...S.rooms.filter(o=>o.id!==r.id).map(o=>[o.id,o.name||'Stanza'])],r.comm)}</select></label>
   </div>
   <p class="note" style="margin:4px 0 0">Portafinestra: una anta ≈ 80×220 cm, due ante ≈ 120×220, tre ante ≈ 150×220, scorrevole ≈ 180×220. Per misure diverse usa «Dettagli → Area portefinestre».</p>
@@ -933,15 +981,54 @@ function renderRel(){
    <div class="row no-print"><button onclick="window.print()">Stampa / salva PDF</button></div></div>
    ${dati}${rooms}${sum}
    <div class="card"><h2>Dati da rilevare</h2><p class="note">Il calcolo vale quanto i dati: ecco cosa è ancora stimato.</p><ul class="l">${miss.map(t=>`<li>${t}</li>`).join('')}</ul></div>`}
+/* ---------- pagina «Consumi»: stagione mese per mese (UNI/TS 11300-1 e -2) e confronto con le bollette ---------- */
+function renderCons(){
+  const C=S.cons,K=consCalc(S),g=S.g,R=sysCalc(S);
+  const inp=(k,lab,step,ph)=>`<label>${lab}<input type="number" step="${step}" data-cn="${k}" value="${C[k]??''}"${ph?` placeholder="${ph}"`:''}></label>`;
+  const sel=(k,lab,list,cls)=>`<label${cls?` class="${cls}"`:''}>${lab}<select data-cn="${k}">${optsS(list,C[k])}</select></label>`;
+  const rows=K.months.map(m=>`<tr><td style="text-align:left">${m.name}</td>
+    <td><input type="number" step="0.1" data-tm="${m.key}" value="${C.tm[m.key]??''}" style="width:64px"></td>
+    <td>${f0(m.Qht)}</td><td>${f0(m.Qgn)}</td><td>${f0(m.Qnd)}</td><td>${f0(m.gasN)}</td>
+    <td><b class="${m.short?'warn':''}">${f0(m.gasI)}</b>${m.short?' *':''}</td><td>${f0(m.gasW+m.gasK)}</td><td><b>${f0(m.tot)}</b></td>
+    <td><input type="number" step="1" data-bol="${m.key}" value="${C.bol[m.key]??''}" style="width:70px"></td></tr>`).join('');
+  const T=K.tot,B=K.bol;
+  let diag='';
+  if(B){const r=B.bol/B.calc,rc=B.bol/B.cap;
+    diag=`<div class="card"><h2>Confronto con le bollette</h2><p>Nei ${B.n} mesi scritti: bollette <b>${f0(B.bol)} m³</b>, calcolo con le vostre ore <b>${f0(B.calc)} m³</b> (le bollette sono il ${f0(r*100)} % del calcolo), riscaldamento continuo a norma ${f0(B.norm)} m³. Il massimo che i radiatori inseriti possono bruciare nelle vostre ore, più acqua calda e cucina, è <b>${f0(B.cap)} m³</b>.</p>
+    <ul class="l">${rc>1.15?`<li class="bad">Le bollette superano di ${f0((rc-1)*100)} % quello che i radiatori inseriti possono consumare in ${f0(num(C.ore,24))} ore al giorno: il gas va anche altrove (altri radiatori o piani, più ore di accensione, un altro apparecchio) oppure le letture non sono vere.</li>`:''}
+     ${r<0.8?'<li class="warn">Le bollette sono più basse del calcolo: la casa reale disperde meno dei dati tipici (muri, finestre, locali vicini) o state più freddi di 20 °C.</li>':''}
+     ${r>=0.8&&rc<=1.15?'<li class="ok">Calcolo e bollette sono vicini: i dati della casa sono plausibili.</li>':''}
+     ${C.bolV!=='vere'?'<li class="note">Controlla in bolletta se i consumi sono «effettivi» (letti) o «stimati»: solo quelli letti valgono per il confronto.</li>':''}</ul></div>`}
+  document.getElementById('viewCons').innerHTML=`<div class="card"><h2>Consumi della stagione</h2>
+   <p class="note">Fabbisogno di calore mese per mese secondo UNI/TS 11300-1 (dispersioni del calcolo a norma alla temperatura media del mese, meno apporti interni e solari utilizzati), poi gas con i rendimenti dell'impianto secondo UNI/TS 11300-2. Stagione della zona E dal 15 ottobre al 15 aprile. ${R.norma?'':'Attenzione: il calcolo è «tarato», quindi le dispersioni sono corrette con il funzionamento reale. '}Valori tipici dove mancano i dati: è una stima per confrontarsi con le bollette.</p>
+   <div class="grid" style="margin-top:8px">
+    ${inp('ore','Ore di accensione al giorno',1)}
+    ${sel('inerzia','Inerzia della casa',[['leggera','leggera'],['media','media'],['pesante','pesante (muri spessi)']])}
+    ${inp('ee','Rendimento di emissione (radiatori)',0.01)}${inp('erg','Rendimento di regolazione',0.01)}
+    ${inp('ed','Rendimento di distribuzione',0.01)}${inp('egn','Rendimento della caldaia (PCI)',0.01)}
+    ${sel('acs','Acqua calda sullo stesso contatore',[['si','sì'],['no','no']])}${inp('Sacs','Superficie della casa per l\'acqua calda (m²)',1,f0(R.area))}
+    ${inp('cuc','Cucina a gas (m³ al mese)',0.5)}${sel('bolV','I m³ delle bollette sono',[['nonso','non so'],['vere','letture vere'],['stimate','stimati']])}
+   </div>
+   <p class="note" style="margin-top:6px">Rendimento totale ${f2x(K.etaG)} (emissione × regolazione × distribuzione × caldaia, valori tipici della UNI/TS 11300-2: caldaia a condensazione con ritorni sui 50 °C ≈ 0,95, con la curva climatica e ritorni bassi fino a 0,98). Apporti interni ${f0(K.phiInt)} W (UNI/TS 11300-1). Costante di tempo della casa ${f0(K.tau)} ore. Acqua calda ${f0(K.Vw)} litri al giorno a 40 °C. Le finestre guardano dove scrivi nei «Dettagli» di ogni stanza.</p></div>
+  <div class="card"><h2>Mese per mese</h2><div class="tw"><table class="st">
+   <tr><th>Mese</th><th>Media fuori °C</th><th>Dispersioni kWh</th><th>Apporti kWh</th><th>Calore che serve kWh</th><th>Gas a norma, sempre acceso m³</th><th>Gas con le vostre ore m³</th><th>Acqua calda e cucina m³</th><th>Totale m³</th><th>Bolletta m³</th></tr>
+   ${rows}
+   <tr><td style="text-align:left"><b>Stagione</b></td><td>${f0(K.GG)} GG</td><td>${f0(T.Qht)}</td><td>${f0(T.Qgn)}</td><td>${f0(T.Qnd)}</td><td>${f0(T.gasN)}</td><td><b>${f0(T.gasI)}</b></td><td>${f0(T.gasW+T.gasK)}</td><td><b>${f0(T.tot)}</b></td><td>${B?f0(B.bol):''}</td></tr></table></div>
+   <p class="note">«Gas a norma» è il consumo per tenere tutte le stanze inserite alla loro temperatura giorno e notte. «Con le vostre ore» applica la riduzione per riscaldamento intermittente (UNI EN ISO 13790) e il limite dei radiatori: * = in quel mese i radiatori inseriti, in ${f0(num(C.ore,24))} ore al giorno, non riescono a dare tutto il calore che serve (al massimo ${f1(K.capKW)} kW), quindi la casa resta sotto i 20 °C. Le medie mensili sono quelle tipiche di Torino: correggile con quelle del tuo comune (UNI 10349-1).</p></div>
+  ${diag}`}
+const f2x=x=>isFinite(x)?x.toLocaleString('it-IT',{minimumFractionDigits:2,maximumFractionDigits:2}):'—';
 function setView(v){
-  S.view=v;[['calc','viewCalc'],['cald','viewCald'],['posto','viewPosto'],['rel','viewRel']].forEach(([k,id])=>{const el=document.getElementById(id);if(el)el.classList.toggle('hide',v!==k)});
+  S.view=v;[['calc','viewCalc'],['cald','viewCald'],['posto','viewPosto'],['rel','viewRel'],['cons','viewCons']].forEach(([k,id])=>{const el=document.getElementById(id);if(el)el.classList.toggle('hide',v!==k)});
   document.querySelectorAll('#tabs button').forEach(b=>b.classList.toggle('pri',b.dataset.view===v));
-  if(v==='cald')renderCald();if(v==='posto')renderPosto();if(v==='rel')renderRel();save()}
+  if(v==='cald')renderCald();if(v==='posto')renderPosto();if(v==='rel')renderRel();if(v==='cons')renderCons();save()}
 
 /* ---------- eventi ---------- */
 document.addEventListener('input',e=>{
   const t=e.target;
   if(t.id==='comune'){if(t.value!==''){S.g.Te=parseFloat(t.value);document.querySelector('input[data-g="Te"]').value=S.g.Te;renderOut()}return}
+  if(t.dataset.cn){S.cons[t.dataset.cn]=(t.tagName==='SELECT')?t.value:(t.value===''?'':parseFloat(t.value));save();if(t.tagName==='SELECT')renderCons();return}
+  if(t.dataset.tm){S.cons.tm[t.dataset.tm]=t.value===''?'':parseFloat(t.value);save();return}
+  if(t.dataset.bol){S.cons.bol[t.dataset.bol]=t.value===''?'':parseFloat(t.value);save();return}
   if(t.dataset.lay!=null){const l=(S.g.wallLay||[])[+t.dataset.lay];if(l){l[t.dataset.lf]=t.dataset.lf==='s'?(t.value===''?'':parseFloat(t.value)):t.value;const u=document.getElementById('strU');if(u)u.textContent=r1(strataU(S.g.wallLay));renderOut()}return}
   if(t.dataset.pd!==undefined){S.posto.done[t.dataset.pd]=!!t.checked;save();const pcd=t.closest('.pc');if(pcd)pcd.classList.toggle('dn',!!t.checked);postoRefresh();return}
   if(t.dataset.pcfg){S.posto.cfg=t.value;save();renderPosto();return}
@@ -969,6 +1056,7 @@ document.addEventListener('input',e=>{
       document.querySelectorAll('select[data-k="comm"] option').forEach(o=>{if(o.value==String(r.id))o.textContent=t.value||'Stanza'})}
     renderOut()}
 });
+document.addEventListener('change',e=>{const t=e.target;if(t.dataset&&(t.dataset.cn||t.dataset.tm||t.dataset.bol)&&t.tagName==='INPUT')renderCons()});
 document.addEventListener('click',e=>{
   const b=e.target.closest('button');if(!b)return;
   if(b.dataset.view){setView(b.dataset.view);return}
